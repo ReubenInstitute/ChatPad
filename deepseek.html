@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>DeepSeek Chat</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+	<script src="https://unpkg.com/marked@4.0.2/lib/marked.umd.js"></script>
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="header">
+		<div class="logo">
+			<div class="logo-icon">DS</div>
+			<div class="logo-text">DeepSeek Chat</div>
+		</div>
+		<div class="balance-display" id="balance-display">
+			<i class="fas fa-coins"></i>
+			<span id="balance-text">
+				{% if balance and balance.balance_infos %}
+					{{ balance.balance_infos[0].total_balance }} credits
+				{% else %}
+					Loading balance...
+				{% endif %}
+			</span>
+		</div>
+	</div>
+	<div class="chat-container">
+		<div id="chat-messages">
+			{% for message in messages %}
+				<div class="message {{ 'user-message' if message.role == 'user' else 'bot-message' }}">
+					{% if message.reasoning_html %}
+						<div class="reasoning-content">
+							{{ message.reasoning_html|safe }}
+						</div>
+					{% endif %}
+					<div class="content">
+						{{ message.content_html|safe }}
+					</div>
+				</div>
+			{% endfor %}
+		</div>
+		<div class="input-container">
+			<div class="input-area">
+				<input type="text" name="message" placeholder="Type your message..." required>
+				<button class="send-btn" id="send-btn">
+					<i class="fas fa-paper-plane"></i>
+				</button>
+			</div>
+			
+			<div class="controls">
+				<div class="reasoning-checkbox">
+					<input type="checkbox" id="use_reasoning">
+					<label for="use_reasoning">Use Reasoning Model</label>
+				</div>
+				
+				<div class="model-info" id="model-indicator">
+					Standard Model
+				</div>
+			</div>
+		</div>
+	</div>
+	<script src="deepseek.js"></script>
+</body>
+</html>
