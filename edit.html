@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+	<form action="{{ request.path.rstrip('/edit') + '/save' }}" method="post">
+		<textarea name="content" rows="30">{{content}}</textarea>
+		<br />
+		<button type="submit">Save</button>
+	</form>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+	{% if safe %}
+		<div>{{ content|safe }}</div>
+	{% else %}
+		<pre>{{ content }}</pre>
+	{% endif %}
+	<a class="button" href="{{ request.path }}/edit">Edit</a>
+{% endblock %}

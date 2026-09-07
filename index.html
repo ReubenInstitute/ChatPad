@@ -1,65 +1,89 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>DeepSeek Chat</title>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-	<script src="https://unpkg.com/marked@4.0.2/lib/marked.umd.js"></script>
-	<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-	<div class="header">
-		<div class="logo">
-			<div class="logo-icon">DS</div>
-			<div class="logo-text">DeepSeek Chat</div>
-		</div>
-		<div class="balance-display" id="balance-display">
-			<i class="fas fa-coins"></i>
-			<span id="balance-text">
-				{% if balance and balance.balance_infos %}
-					{{ balance.balance_infos[0].total_balance }} credits
-				{% else %}
-					Loading balance...
-				{% endif %}
-			</span>
-		</div>
+{% extends "base.html" %}
+{% block content %}
+	<ul>
+		{% for folder in folders %}
+			<li><a href="{{ request.path }}{{ folder }}/">{{ folder }}/</a></li>
+		{% endfor %}
+		{% for file in files %}
+			{% set display = file[:-3] if file.endswith('.md') else file %}
+			<li><a href="{{ request.path }}{{ display }}">{{ file }}</a></li>
+		{% endfor %}
+	</ul>
+	{% if not folders and not files %}
+		<p>(empty)</p>
+	{% endif %}
+
+	<hr>
+	<h2>Prompt Builder</h2>
+	<div id="status"></div>
+	<div class="controls">
+		<button onclick="selectAll()">Select All</button>
+		<button onclick="deselectAll()">Deselect All</button>
+		<button onclick="generatePrompt(false)">Copy</button>
 	</div>
-	<div class="chat-container">
-		<div id="chat-messages">
-			{% for message in messages %}
-				<div class="message {{ 'user-message' if message.role == 'user' else 'bot-message' }}">
-					{% if message.reasoning_html %}
-						<div class="reasoning-content">
-							{{ message.reasoning_html|safe }}
-						</div>
-					{% endif %}
-					<div class="content">
-						{{ message.content_html|safe }}
-					</div>
-				</div>
-			{% endfor %}
+	<div class="file-list">
+		{% for f in prompt_files %}
+		<div class="file-item">
+			<label>
+				<input type="checkbox" name="prompt_files" value="{{ f }}" checked>
+				{{ f }}
+			</label>
 		</div>
-		<div class="input-container">
-			<div class="input-area">
-				<input type="text" name="message" placeholder="Type your message..." required>
-				<button class="send-btn" id="send-btn">
-					<i class="fas fa-paper-plane"></i>
-				</button>
-			</div>
-			
-			<div class="controls">
-				<div class="reasoning-checkbox">
-					<input type="checkbox" id="use_reasoning">
-					<label for="use_reasoning">Use Reasoning Model</label>
-				</div>
-				
-				<div class="model-info" id="model-indicator">
-					Standard Model
-				</div>
-			</div>
-		</div>
+		{% endfor %}
 	</div>
-	<script src="deepseek.js"></script>
-</body>
-</html>
+
+	<script>
+		function selectAll() {
+			document.querySelectorAll('input[name="prompt_files"]').forEach(cb => cb.checked = true);
+		}
+		function deselectAll() {
+			document.querySelectorAll('input[name="prompt_files"]').forEach(cb => cb.checked = false);
+		}
+		async function generatePrompt(cleaned) {
+			const selectedFiles = Array.from(document.querySelectorAll('input[name="prompt_files"]:checked'))
+									  .map(cb => cb.value);
+			if (selectedFiles.length === 0) {
+				showStatus('Please select at least one file', 'error');
+				return;
+			}
+			const endpoint = cleaned ? '/generate-prompt-cleaned' : '/generate-prompt';
+			try {
+				const response = await fetch(endpoint, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ files: selectedFiles })
+				});
+				const data = await response.json();
+				if (data.success) {
+					await copyToClipboard(data.prompt);
+					showStatus(`Copied ${data.file_count} files (${data.character_count} chars) to clipboard!`, 'success');
+				} else {
+					showStatus('Error: ' + data.error, 'error');
+				}
+			} catch (error) {
+				showStatus('Error: ' + error, 'error');
+			}
+		}
+		async function copyToClipboard(text) {
+			try {
+				await navigator.clipboard.writeText(text);
+			} catch (err) {
+				const textArea = document.createElement('textarea');
+				textArea.value = text;
+				document.body.appendChild(textArea);
+				textArea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textArea);
+			}
+		}
+		function showStatus(message, type) {
+			const statusDiv = document.getElementById('status');
+			statusDiv.textContent = message;
+			statusDiv.className = 'status ' + type;
+			setTimeout(() => {
+				statusDiv.textContent = '';
+				statusDiv.className = 'status';
+			}, 3000);
+		}
+	</script>
+{% endblock %}
