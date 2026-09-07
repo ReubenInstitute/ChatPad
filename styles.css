@@ -1,297 +1,120 @@
 :root {
-	--background: #fdfbf7;
-	--text: #2c2c2c;
-	--bold: #a45d1c;
-	--heading: #b06d25;
-	--subheading: #c48a4a;
-	--link: #2c6e7e;
-	--button-text: #fdfbf7;
-	--button-bg: #b06d25;
-	--table-border: #e6e1d6;
-	--table-cell-text: #2c2c2c;
-	--table-cell-bg: #fdfbf7;
-	--table-header-text: #1e1b16;
-	--table-header-bg: #f2ece1;
-	--code-text: #3c342c;
-	--code-bg: transparent;
-	--pre-text: #3c342c;
-	--pre-bg: #f0e7da;
-	--blockquote-text: #4a433a;
-	--blockquote-bg: #fbf0d0;
-
-/*	--scripture-text: #4a433a;
-	--scripture-bg: #fbf0d0;
-	--number-text: white;
-	--number-bg: #b06d25;
-	--nav: #e8e0d4;
-	--caption: #8f7a66;*/
+	--bg: #ffffff;
+	--text: #222222;
+	--card-bg: #f5f5f5;
+	--error-bg: #c0392b;
+	--error-text: #ffffff;
+	--link: #0066cc;
+	--table-border: #dddddd;
+	--table-th-text: #222222;
+	--table-th-bg: #f0f0f0;
+	--reasoning-text: #6666cc;
+	--prompt-text: #b8960f;
 }
 
 @media (prefers-color-scheme: dark) {
 	:root {
-	--background: #1a1815;
-	--text: #d6d0c8;
-	--bold: #f5a742;
-	--heading: #f5a742;
-	--subheading: #e6b87a;
-	--link: #7aaec2;
-	--button-text: #1a1815;
-	--button-bg: #f5a742;
-	--table-border: #423a31;
-	--table-cell-text: #e2ded7;
-	--table-cell-bg: #24201b;
-	--table-header-text: #fdfbf7;
-	--table-header-bg: #332b21;
-	--pre-text: #e2dcd2;
-	--pre-bg: #2a241e;
-	--code-text: #e2dcd2;
-	--code-bg: transparent;
-	--blockquote-text: #cfc7ba;
-	--blockquote-bg: #332b21;
-/*	--scripture-text: #cfc7ba;
-	--scripture-bg: #332b21;
-	--number-text: #1a1815;
-	--number-bg: #f5a742;
-	--nav: #2a251f;
-	--caption: #a89884;*/
+		--bg: #000000;
+		--text: #e0e0e0;
+		--card-bg: #242424;
+		--error-bg: #7a2a20;
+		--error-text: #ffffff;
+		--link: #6ab0ff;
+		--table-border: #444444;
+		--table-th-text: #e0e0e0;
+		--table-th-bg: #2c2c2c;
+		--reasoning-text: #7ba8d4;
+		--prompt-text: #e5c34a;
 	}
 }
 
 
 
-/*
-@font-face {
-	font-family: 'garamond';
-	src: url('/fonts/EBGaramond-Regular.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'garamond';
-	src: url('/fonts/EBGaramond-Bold.ttf') format('truetype');
-	font-weight: bold;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'garamond';
-	src: url('/fonts/EBGaramond-Italic.ttf') format('truetype');
-	font-weight: normal;
-	font-style: italic;
-}
-@font-face {
-	font-family: 'garamond';
-	src: url('/fonts/EBGaramond-BoldItalic.ttf') format('truetype');
-	font-weight: bold;
-	font-style: italic;
-}
-*/
-
-@font-face {
-	font-family: 'ptserif';
-	src: url('/fonts/PTSerif-Regular.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'ptserif';
-	src: url('/fonts/PtSerif-Bold.ttf') format('truetype');
-	font-weight: bold;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'ptserif';
-	src: url('/fonts/PtSerif-Italic.ttf') format('truetype');
-	font-weight: normal;
-	font-style: italic;
-}
-@font-face {
-	font-family: 'ptserif';
-	src: url('/fonts/PtSerif-BoldItalic.ttf') format('truetype');
-	font-weight: bold;
-	font-style: italic;
-}
-
-
-
-
-
-
-
-
-
-
-@font-face {
-	font-family: 'david';
-	src: url('/fonts/DavidCLM-Medium.otf') format('opentype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'david';
-	src: url('/fonts/DavidCLM-Bold.otf') format('opentype');
-	font-weight: bold;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'david';
-	src: url('/fonts/DavidCLM-Italic.otf') format('opentype');
-	font-weight: normal;
-	font-style: italic;
-}
-
-@font-face {
-	font-family: 'david';
-	src: url('/fonts/DavidCLM-BoldItalic.otf') format('opentype');
-	font-weight: bold;
-	font-style: italic;
-}
-
-
-
-@font-face {
-	font-family: text;
-	src: url('/fonts/Assistant-Regular.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: text;
-	src: url('/fonts/Assistant-Bold.ttf') format('truetype');
-	font-weight: bold;
-	font-style: normal;
-}
-
-
-
-@font-face {
-	font-family: 'Taamey Frank CLM';
-	src: url('/fonts/TaameyFrankCLM-BoldOblique.ttf') format('truetype');
-	font-weight: bold;
-	font-style: italic;
-}
-
-@font-face {
-	font-family: 'Taamey Frank CLM';
-	src: url('/fonts/TaameyFrankCLM-Bold.ttf') format('truetype');
-	font-weight: bold;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'Taamey Frank CLM';
-	src: url('/fonts/TaameyFrankCLM-Medium.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: 'Taamey Frank CLM';
-	src: url('/fonts/TaameyFrankCLM-MediumOblique.ttf') format('truetype');
-	font-weight: normal;
-	font-style: italic;
-}
-
-
-/*
-@font-face {
-	font-family: ReubenSerif;
-	src: url('/fonts/ReuvenSerif.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: Lulav;
-	src: url('/fonts/LulavCLM-Bold.ttf') format('opentype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: bellefair;
-	src: url('/fonts/Bellefair-Regular.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: ubuntu;
-	src: url('/fonts/Ubuntu-Regular.ttf') format('truetype');
-}
-
-*/
-
-/*
-@font-face {
-	font-family: title;
-	src: url('/fonts/OpenSansHebrewCondensed-Bold.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: sbl;
-	src: url('/fonts/SBL_Hbrw.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-@font-face {
-	font-family: vilna;
-	src: url('/fonts/RommVilna-Regular.ttf') format('truetype');
-	font-weight: normal;
-	font-style: normal;
-}
-
-
-@font-face {
-	font-family: hillel;
-	src: url('/fonts/HillelCLM-Medium.ttf') format('truetype');
-}
- */
-
-
-
-* {
-	margin: 0;
-	padding: 0;
-}
 
 body {
-	background-color: var(--background);
+	font-family: sans-serif;
+	background: var(--bg);
 	color: var(--text);
-	padding: 1rem;
-	line-height: 1.3;
-	font-family: ptserif;
-	font-family: text;
-	font-size: 0.8rem;
+	max-width: 800px;
+	margin: 0 auto;
+	padding: 20px;
 }
-
-[dir="rtl"] body {
-	font-family: david;
-}
-
 
 nav {
-	padding: 1rem 0;
+	padding-bottom: 10px;
+	margin-bottom: 10px;
+}
+
+.message {
+}
+
+.prompt {
+	background: var(--card-bg);
+	padding: 10px;
+	border-radius: 4px;
+	margin-left: 2em;
+	color: var(--prompt-text);
+}
+
+.reasoning {
+	padding: 5px 10px;
+	border-radius: 4px;
+	font-style: italic;
+	font-size: 0.9rem;
+	margin: 10px 0;
+	color: var(--reasoning-text);
+}
+
+.response {
+}
+
+.error {
+	background: var(--error-bg);
+	color: var(--error-text);
+	padding: 5px 10px;
+	margin: 10px 0;
+	border-radius: 4px;
+}
+
+.message i {
+	text-align: right;
+	float: right;
+	color: #999;
 	}
 
-h1 {
-	color: var(--heading);
+.message .content {
+	xoverflow: hidden;
+	transition: max-height 0.3s ease;
+}
+
+.message .info {
+	color: #333;
+	}
+
+
+.chatbox {
+	background: var(--card-bg);
+	padding: 10px;
+	border-radius: 5px;
+	}
+
+.chatbox select {
+	font-size: 0.7em;
+	}
+
+.chatbox textarea {
+	width: 100%;
 }
 
 
-h2, h3, h4 {
-	color: var(--subheading);
-	margin-top: 1rem;
-	margin-bottom: 1rem;
+pre {
+	font-size: 80%;
+	background-color: var(--card-bg);
+	}
+
+
+h1 {
+	color: var(--text);
 }
 
 a {
@@ -300,133 +123,23 @@ a {
 }
 
 
-pre {
-	border-radius: 5px;
-	padding: 0.5em;
-	color: var(--pre-text);
-	background-color: var(--pre-bg);
-	white-space: pre-wrap;
-	}
 
-code {
-	padding: 0.2rem;
-	xmargin: 0.5rem;
-	color: var(--code);
-	background-color: var(--code-bg);
-	
-	}
 
-ul {
-	list-style-position: inside;
-	padding-inline-start: 0.5em;
-}
-
-ol {
-	list-style-position: inside;
-	padding-inline-start: 0.5em;
-}
 
 
 table {
 	border-collapse: collapse;
 	width: 100%;
+	margin: 10px 0;
 }
 
-th,
-td {
+th, td {
 	border: 1px solid var(--table-border);
-	padding: 0.2rem 0.4rem;
-}
-
-th {
-	background-color: var(--table-header-bg);
-	color: var(--table-header-text);
-	font-weight: bold;
-	border-top: 1px solid var(--table-border);
-	border-bottom: 1px solid var(--table-border);
-}
-
-th:first-child {
-	border-left: 1px solid var(--table-border);
-}
-
-th:last-child {
-	border-right: 1px solid var(--table-border);
-}
-
-
-hr {
-	margin: 2rem 0;
-}
-
-p {
-	margin: 1rem 0;
-	line-height: 1.6;
-}
-
-img, video {
-	max-width: 100%;
-	}
-
-
-blockquote {
-	border: 0px solid red;
-	color: var(--blockquote-text);
-	background-color: var(--blockquote-bg);
-	padding: 0.1rem 0.5rem;
-	font-size: 0.95em;
-	border-radius: 10px;
-}
-
-
-a.button,
-button {
-	display: inline-block;
-	background-color: var(--button-bg);
-	color: var(--button-text);
-	border: none;
-	border-radius: 3px;
-	padding: 0.3rem 1rem;
-}
-
-
-
-textarea {
-	width: 100%;
-	font-family: text;
-	xfont-size: 1em;
-	}
-
-
-/*
-[dir="ltr"] #content th,
-[dir="ltr"] #content td {
+	padding: 8px 10px;
 	text-align: left;
 }
 
-[dir="rtl"] #content th,
-[dir="rtl"] #content td {
-	text-align: right;
+th {
+	background: var(--table-th-bg);
+	color: var(--table-th-text);
 }
-
-.content img {
-	max-width: 40%;
-	height: auto;
-}
-*/
-
-/*
-[dir="ltr"] .content img {
-	float: right;
-	margin: 0.5em 0 0.5em 1em;
-}
-
-[dir="rtl"] .content img {
-	float: left;
-	margin: 0.5em 1em 0.5em 0;
-}*/
-/*
-.rtl {
-	direction: rtl;
-	}
-*/

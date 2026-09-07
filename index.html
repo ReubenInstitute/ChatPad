@@ -1,89 +1,46 @@
 {% extends "base.html" %}
-{% block content %}
-	<ul>
-		{% for folder in folders %}
-			<li><a href="{{ request.path }}{{ folder }}/">{{ folder }}/</a></li>
-		{% endfor %}
-		{% for file in files %}
-			{% set display = file[:-3] if file.endswith('.md') else file %}
-			<li><a href="{{ request.path }}{{ display }}">{{ file }}</a></li>
-		{% endfor %}
-	</ul>
-	{% if not folders and not files %}
-		<p>(empty)</p>
-	{% endif %}
 
-	<hr>
-	<h2>Prompt Builder</h2>
-	<div id="status"></div>
-	<div class="controls">
-		<button onclick="selectAll()">Select All</button>
-		<button onclick="deselectAll()">Deselect All</button>
-		<button onclick="generatePrompt(false)">Copy</button>
-	</div>
-	<div class="file-list">
-		{% for f in prompt_files %}
-		<div class="file-item">
+{% block title %}Sessions{% endblock %}
+
+{% block content %}
+	<h1>New Chat</h1>
+	<form action="/api/message" method="post">
+		<div>
+			<label for="prompt">Prompt:</label><br>
+			<textarea name="prompt" id="prompt" rows="4" cols="50" required></textarea>
+		</div>
+		<div>
+			<label for="model">Model:</label>
+			<select name="model" id="model">
+				{% for model in models %}
+					<option value="{{ model.id }}" {% if loop.first %}selected{% endif %}>
+						{{ model.id }}
+					</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div>
 			<label>
-				<input type="checkbox" name="prompt_files" value="{{ f }}" checked>
-				{{ f }}
+				<input type="checkbox" name="reasoning" checked>
+				Enable reasoning
 			</label>
 		</div>
-		{% endfor %}
-	</div>
+		<button type="submit">Send</button>
+	</form>
 
-	<script>
-		function selectAll() {
-			document.querySelectorAll('input[name="prompt_files"]').forEach(cb => cb.checked = true);
-		}
-		function deselectAll() {
-			document.querySelectorAll('input[name="prompt_files"]').forEach(cb => cb.checked = false);
-		}
-		async function generatePrompt(cleaned) {
-			const selectedFiles = Array.from(document.querySelectorAll('input[name="prompt_files"]:checked'))
-									  .map(cb => cb.value);
-			if (selectedFiles.length === 0) {
-				showStatus('Please select at least one file', 'error');
-				return;
-			}
-			const endpoint = cleaned ? '/generate-prompt-cleaned' : '/generate-prompt';
-			try {
-				const response = await fetch(endpoint, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ files: selectedFiles })
-				});
-				const data = await response.json();
-				if (data.success) {
-					await copyToClipboard(data.prompt);
-					showStatus(`Copied ${data.file_count} files (${data.character_count} chars) to clipboard!`, 'success');
-				} else {
-					showStatus('Error: ' + data.error, 'error');
-				}
-			} catch (error) {
-				showStatus('Error: ' + error, 'error');
-			}
-		}
-		async function copyToClipboard(text) {
-			try {
-				await navigator.clipboard.writeText(text);
-			} catch (err) {
-				const textArea = document.createElement('textarea');
-				textArea.value = text;
-				document.body.appendChild(textArea);
-				textArea.select();
-				document.execCommand('copy');
-				document.body.removeChild(textArea);
-			}
-		}
-		function showStatus(message, type) {
-			const statusDiv = document.getElementById('status');
-			statusDiv.textContent = message;
-			statusDiv.className = 'status ' + type;
-			setTimeout(() => {
-				statusDiv.textContent = '';
-				statusDiv.className = 'status';
-			}, 3000);
-		}
-	</script>
+	<hr>
+
+	<table>
+		<tr>
+			<th>Created</th>
+			<th>Session</th>
+		</tr>
+		{% for session_id, timestamp, title in sessions %}
+		<tr>
+			<td>{{ timestamp|format_timestamp }}</td>
+			<td><a href="/session/{{ session_id }}">{{ title }}</a></td>
+		</tr>
+		{% endfor %}
+	</table>
+
 {% endblock %}

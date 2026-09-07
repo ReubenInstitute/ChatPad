@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Models{% endblock %}
+
+{% block content %}
+	<h1>Available Models</h1>
+	<table>
+		<thead>
+			<tr>
+				<th>Name</th>
+				<th>Description</th>
+				<th>Context Length</th>
+				<th>Pricing</th>
+				<th>Overrides</th>
+				<th>Overridden Pricing</th>
+			</tr>
+		</thead>
+		<tbody>
+		{% for model in models %}
+			<tr>
+				<td>{{ model.name }}</td>
+				<td>{{ model.description }}</td>
+				<td>{{ model.context_length|format_number }}</td>
+
+				<!-- Base pricing -->
+				<td>
+					{% for key, value in model.pricing.items() %}
+						{{ key }}: {% if value is not none %}{{ value }}{% endif %}<br>
+					{% endfor %}
+				</td>
+
+				<!-- Override conditions -->
+				<td>
+					{% for cond in model.overrides %}
+						{% for key, value in cond.items() %}
+							{{ key }}: {{ value }}<br>
+						{% endfor %}
+						{% if not loop.last %}<hr>{% endif %}
+					{% endfor %}
+				</td>
+
+				<!-- Overridden prices -->
+				<td>
+					{% for prices in model.overridden_pricing %}
+						{% for key, value in prices.items() %}
+							{{ key }}: {% if value is not none %}{{ value }}{% endif %}<br>
+						{% endfor %}
+						{% if not loop.last %}<hr>{% endif %}
+					{% endfor %}
+				</td>
+			</tr>
+		{% endfor %}
+		</tbody>
+	</table>
+{% endblock %}

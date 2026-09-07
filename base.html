@@ -4,21 +4,20 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="/styles.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+	<script src="/chat.js"></script>
 	<title></title>
 </head>
 <body>
-	<nav>
-		<a href="/">&#x1F3E0;</a> /
-		{% for segment in paths %}
-			{% set cumulative = paths[:loop.index]|join('/') + '/' %}
-			{% if loop.last and request.path.endswith('/') %}
-				<span>{{segment}}</span>
-			{% else %}
-				<a href="/{{cumulative}}">{{segment}}</a>
-			{% endif %}
-			{% if not loop.last %}/{% endif %}
-		{% endfor %}
-	</nav>
+
+<nav>
+	<a href="/">Chat</a>
+	<a href="/files/">Files</a>
+	<a href="/docs/">Docs</a>
+	<a href="/models">Models</a>
+</nav>
+
+
 	<main>
 		{% block content %}{% endblock %}
 	</main>

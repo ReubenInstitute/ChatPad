@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Session {{ session_id }}{% endblock %}
+
+{% block content %}
+	<h1>Session: {{ session_id }}</h1>
+
+	<div class="messages">
+	{% for msg in messages %}
+		<div class="message">
+			<p>{{ msg.timestamp|format_timestamp }}</p>
+
+			<div class="prompt">
+				<div>
+					<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+					<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+					<div class="content">
+						{{ msg.prompt }}
+					</div>
+				</div>
+				<div style="display:none;">
+					<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+					<span>{{ msg.prompt[:30] }}</span>
+				</div>
+			</div>
+
+			{% if msg.reasoning %}
+			<div class="reasoning">
+				<div>
+					<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+					<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+					<div class="content">
+						{{ msg.reasoning|markdown|safe }}
+					</div>
+				</div>
+				<div style="display:none;">
+					<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+					<span>{{ msg.reasoning[:30] }}</span>
+				</div>
+			</div>
+			{% endif %}
+
+			{% if msg.error %}
+				<div class="error">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							<p>{{ msg.error.message }}</p>
+							<small>Code: {{ msg.error.code }}</small>
+							{% if msg.error.metadata %}
+								<p>{{ msg.error.metadata.raw }}</p>
+							{% endif %}
+						</div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.error.message[:30] }}</span>
+					</div>
+				</div>
+			{% endif %}
+
+			{% if msg.response %}
+				<div class="response">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							{{ msg.response|markdown|safe }}
+						</div>
+						<div class="info"><small>{{ msg.model }} ({{ msg.cost or 0 }}$)</small></div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.response[:30] }}</span>
+					</div>
+				</div>
+			{% endif %}
+
+		</div>
+	{% endfor %}
+	</div>
+
+	<hr>
+
+	<div class="chatbox">
+	<form method="post">
+		<div>
+			<input type="checkbox" name="reasoning" checked>
+			<label for="reasoning">Reasoning</label>
+		</div>
+		<div>
+			<select name="model" id="model">
+				{% for model in models %}
+					<option value="{{ model.id }}" {% if model.id == default_model %}selected{% endif %}>
+						{{ model.id }}
+					</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div>
+			<textarea name="prompt" id="prompt" rows="5" required></textarea>
+		</div>
+
+		<button type="submit">Send</button>
+	</form>
+	</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    initializeChatView();
+    document.querySelector('form').addEventListener('submit', handleStreamingSubmit);
+});
+</script>
+
+
+<template id="message-template">
+	<div class="message">
+		<div class="prompt">
+			<div>
+				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+				<div class="content"></div>
+			</div>
+			<div style="display:none;">
+				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+				<span></span>
+			</div>
+		</div>
+		<div class="reasoning" style="display:none;">
+			<div>
+				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+				<div class="content"></div>
+			</div>
+			<div style="display:none;">
+				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+				<span></span>
+			</div>
+		</div>
+		<div class="response">
+			<div>
+				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+				<div class="content"></div>
+				<div class="info"><small></small></div>
+			</div>
+			<div style="display:none;">
+				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+				<span></span>
+			</div>
+		</div>
+	</div>
+</template>
+
+{% endblock %}

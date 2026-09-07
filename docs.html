@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+	<ul>
+		{% for folder in folders %}
+			<li><a href="{{ request.path }}{{ folder }}/">{{ folder }}/</a></li>
+		{% endfor %}
+		{% for file in files %}
+			<li><a href="{{ request.path }}{{ file }}">{{ file }}</a></li>
+		{% endfor %}
+	</ul>
+	{% if not folders and not files %}
+		<p>(empty)</p>
+	{% endif %}
+{% endblock %}
