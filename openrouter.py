@@ -1,8 +1,9 @@
 import requests
 import json
 import random
+import os
 
-with open("key.txt", "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
 	API_KEY = f.read().strip()
 
 class OpenRouter:
