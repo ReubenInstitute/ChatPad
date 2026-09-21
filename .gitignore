@@ -1,4 +1,4 @@
-key.txt
+key*.txt
 sessions/
 models.json
 __pycache__/
