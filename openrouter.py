@@ -1,12 +1,14 @@
 import requests
 import json
 import random
+import time
 import os
 
 with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
 	API_KEY = f.read().strip()
 
 class OpenRouter:
+	timeout = 120
 	free_only = True
 	#free_only = False
 
@@ -90,8 +92,14 @@ class OpenRouter:
 		if tools:
 			payload["tools"] = tools
 		try:
-			response = requests.post(url, headers=headers, json=payload, timeout=300)
-			result = response.json()
+			response = requests.post(url, headers=headers, json=payload, timeout=(10, OpenRouter.timeout), stream=True)
+			deadline = time.monotonic() + OpenRouter.timeout
+			body = b""
+			for chunk in response.iter_content(8192):
+				body += chunk
+				if time.monotonic() > deadline:
+					raise TimeoutError(f"no complete reply after {OpenRouter.timeout} seconds")
+			result = json.loads(body)
 			if "error" not in result:
 				result["choices"][0]["message"]
 		except Exception as e:
