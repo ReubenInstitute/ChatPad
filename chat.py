@@ -7,6 +7,9 @@ import uuid7
 import json
 import tarfile
 import shutil
+import ast
+import math
+import operator
 import socket
 import ipaddress
 from urllib.parse import urlparse, urljoin
@@ -251,6 +254,9 @@ TOOLS = [
 	_tool("copy", "Copy a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
 	_tool("fetch", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
 	_tool("delete", "Delete a file. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("current_time", "Get the current date and time on the server.", {}),
+	_tool("calculator", "Evaluate an arithmetic expression exactly. Supports + - * / // % **, parentheses, pi, e, and sqrt sin cos tan log log10 exp floor ceil abs round min max.", {"expression": {"type": "string"}}),
+	_tool("todo", "Keep a todo list (stored in todo.md in the workspace). Actions: add (item is the text), done (item is the number), remove (item is the number), list. Returns the updated list.", {"action": {"type": "string", "enum": ["add", "done", "remove", "list"]}, "item": {"type": "string"}}, required=["action"]),
 	_tool("mkdir", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 	_tool("rmdir", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 ]
@@ -462,6 +468,91 @@ def rmdir(path):
 	return f"removed folder {path}"
 
 
+def current_time():
+	return datetime.now().astimezone().strftime("%A %Y-%m-%d %H:%M:%S %Z (UTC%z)")
+
+
+CALC_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow}
+CALC_NAMES = {"pi": math.pi, "e": math.e}
+CALC_FUNCS = {n: getattr(math, n) for n in ("sqrt", "sin", "cos", "tan", "log", "log10", "exp", "floor", "ceil")}
+CALC_FUNCS.update({"abs": abs, "round": round, "min": min, "max": max})
+
+
+def _calc(node):
+	if isinstance(node, ast.Expression):
+		return _calc(node.body)
+	if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+		return node.value
+	if isinstance(node, ast.Name) and node.id in CALC_NAMES:
+		return CALC_NAMES[node.id]
+	if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+		value = _calc(node.operand)
+		return value if isinstance(node.op, ast.UAdd) else -value
+	if isinstance(node, ast.BinOp) and type(node.op) in CALC_OPS:
+		left, right = _calc(node.left), _calc(node.right)
+		if isinstance(node.op, ast.Pow) and isinstance(left, int) and isinstance(right, int) and right > 0 and left.bit_length() * right > 100000:
+			raise ValueError("result too large")
+		return CALC_OPS[type(node.op)](left, right)
+	if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in CALC_FUNCS and not node.keywords:
+		return CALC_FUNCS[node.func.id](*[_calc(a) for a in node.args])
+	raise ValueError("unsupported expression")
+
+
+def calculator(expression):
+	if len(expression) > 500:
+		return "expression too long"
+	return str(_calc(ast.parse(expression.strip(), mode="eval")))
+
+
+TODO_FILE = "todo.md"
+
+
+def _todo_load():
+	full = os.path.join(SYSTEM_DIR, TODO_FILE)
+	if not os.path.exists(full):
+		return []
+	items = []
+	with open(full, "r", encoding="utf-8") as f:
+		for line in f.read().splitlines():
+			if line.startswith("- [x] "):
+				items.append([True, line[6:]])
+			elif line.startswith("- [ ] "):
+				items.append([False, line[6:]])
+	return items
+
+
+def _todo_show(items):
+	lines = [f"{i}. [{'x' if done else ' '}] {text}" for i, (done, text) in enumerate(items, 1)]
+	return "\n".join(lines) or "(empty)"
+
+
+def todo(action, item=None):
+	items = _todo_load()
+	if action == "list":
+		return _todo_show(items)
+	if action == "add":
+		if not item:
+			return "item text required"
+		items.append([False, str(item).replace("\n", " ")])
+	elif action in ("done", "remove"):
+		try:
+			number = int(item)
+		except (TypeError, ValueError):
+			return "item must be the number from the list"
+		if not 1 <= number <= len(items):
+			return f"no item {number}"
+		if action == "done":
+			items[number - 1][0] = True
+		else:
+			del items[number - 1]
+	else:
+		return f"unknown action: {action} (add, done, remove, list)"
+	os.makedirs(SYSTEM_DIR, exist_ok=True)
+	with open(os.path.join(SYSTEM_DIR, TODO_FILE), "w", encoding="utf-8") as f:
+		f.write("".join(f"- [{'x' if done else ' '}] {text}\n" for done, text in items))
+	return _todo_show(items)
+
+
 def run_tool(name, arguments):
 	try:
 		args = json.loads(arguments) if isinstance(arguments, str) else arguments
@@ -481,6 +572,12 @@ def run_tool(name, arguments):
 			return fetch(args["url"], args.get("path"))
 		if name == "delete":
 			return delete(args["path"])
+		if name == "current_time":
+			return current_time()
+		if name == "calculator":
+			return calculator(args["expression"])
+		if name == "todo":
+			return todo(args["action"], args.get("item"))
 		if name == "mkdir":
 			return mkdir(args["path"])
 		if name == "rmdir":
