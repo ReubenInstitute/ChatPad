@@ -109,11 +109,11 @@
 
 	<div class="chatbox">
 	<form action="/api/message/{{ session_id }}" method="post">
-		<div>
-			<input type="checkbox" name="reasoning" checked>
+		<div class="opt-reasoning">
+			<input type="checkbox" name="reasoning" id="reasoning" checked>
 			<label for="reasoning">Reasoning</label>
 		</div>
-		<div>
+		<div class="opt-model">
 			<select name="model" id="model">
 				{% for model in models %}
 					<option value="{{ model.id }}" {% if model.id == default_model %}selected{% endif %}>
@@ -122,11 +122,11 @@
 				{% endfor %}
 			</select>
 		</div>
-		<div>
-			<textarea name="prompt" id="prompt" rows="5" required></textarea>
+		<div class="input">
+			<textarea name="prompt" id="prompt" rows="2" placeholder="Message" required></textarea>
 		</div>
 
-		<button type="submit">Send</button>
+		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
 	</form>
 	</div>
 

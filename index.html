@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Sessions{% endblock %}
+{% block title %}Sessions
+{% endblock %}
 
 {% block content %}
 	<h1>New Chat</h1>
+	<div class="chatbox">
 	<form action="/api/message" method="post">
-		<div>
-			<label for="prompt">Prompt:</label><br>
-			<textarea name="prompt" id="prompt" rows="4" cols="50" required></textarea>
+		<div class="opt-reasoning">
+			<input type="checkbox" name="reasoning" id="reasoning" checked>
+			<label for="reasoning">Reasoning</label>
 		</div>
-		<div>
-			<label for="model">Model:</label>
+		<div class="opt-model">
 			<select name="model" id="model">
 				{% for model in models %}
 					<option value="{{ model.id }}" {% if loop.first %}selected{% endif %}>
@@ -19,14 +20,13 @@
 				{% endfor %}
 			</select>
 		</div>
-		<div>
-			<label>
-				<input type="checkbox" name="reasoning" checked>
-				Enable reasoning
-			</label>
+		<div class="input">
+			<textarea name="prompt" id="prompt" rows="2" placeholder="Message" required></textarea>
 		</div>
-		<button type="submit">Send</button>
+
+		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
 	</form>
+	</div>
 
 	<hr>
 
@@ -42,5 +42,6 @@
 		</tr>
 		{% endfor %}
 	</table>
+
 
 {% endblock %}
