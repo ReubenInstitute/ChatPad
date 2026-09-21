@@ -65,6 +65,15 @@ nav {
 	color: var(--reasoning-text);
 }
 
+.tool {
+	padding: 5px 10px;
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 0.85rem;
+	margin: 10px 0;
+	background: var(--card-bg);
+}
+
 .response {
 }
 

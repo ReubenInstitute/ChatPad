@@ -61,6 +61,7 @@ class OpenRouter:
 				"name": model.get("name"),
 				"description": model.get("description"),
 				"context_length": model.get("context_length"),
+				"supported_parameters": model.get("supported_parameters"),
 				"pricing": base_pricing,
 				"overrides": overrides_conditions,
 				"overridden_pricing": overridden_pricing
@@ -72,16 +73,10 @@ class OpenRouter:
 
 
 	@staticmethod
-	def message(prompt, model=None, think=False, history=[]):
+	def message(messages, model=None, think=False, tools=None):
 		if model is None:
 			available = OpenRouter.models()
 			model = random.choice(available)["id"]
-		messages = []
-		for user_msg, assistant_msg in history:
-			messages.append({"role": "user", "content": user_msg})
-			if assistant_msg:
-				messages.append({"role": "assistant", "content": assistant_msg})
-		messages.append({"role": "user", "content": prompt})
 		url = "https://openrouter.ai/api/v1/chat/completions"
 		headers = {
 			"Authorization": f"Bearer {API_KEY}",
@@ -92,6 +87,8 @@ class OpenRouter:
 			"messages": messages,
 			"reasoning": {"enabled": think}
 		}
+		if tools:
+			payload["tools"] = tools
 		try:
 			response = requests.post(url, headers=headers, json=payload, timeout=300)
 			result = response.json()

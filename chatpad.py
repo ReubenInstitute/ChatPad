@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session
+from chat import session_message, list_sessions, get_session, group_turns
 import re
 
 app = Flask(__name__, template_folder='.', static_folder='.')
@@ -67,13 +67,13 @@ def raw_view(session_id):
         return "Session not found", 404
     text_parts = []
     for msg in messages:
-        if 'prompt' in msg and msg['prompt'] is not None:
-            prompt = re.sub(r'\[FILE: ([^\]]+)\]\s*\n\[FILE_CONTENT_START\].*?\n\[FILE_CONTENT_END: \1\]', lambda m: f"[FILE: {m.group(1)}]", msg['prompt'], flags=re.DOTALL)
+        if msg['type'] == 'prompt':
+            prompt = re.sub(r'\[FILE: ([^\]]+)\]\s*\n\[FILE_CONTENT_START\].*?\n\[FILE_CONTENT_END: \1\]', lambda m: f"[FILE: {m.group(1)}]", msg['content'], flags=re.DOTALL)
             prompt = re.sub(r'\n{3,}', '\n\n', prompt).strip()
             text_parts.append(prompt)
-        if 'response' in msg and msg['response'] is not None:
-            text_parts.append(f"[{msg['model']}] {msg['response']}")
-        text_parts.append('')
+        elif msg['type'] == 'response' and msg.get('content') is not None:
+            text_parts.append(f"[{msg['model']}] {msg['content']}")
+            text_parts.append('')
     export_text = '\n\n'.join(text_parts).strip()
     return export_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
@@ -93,15 +93,16 @@ def index():
 def view_session(session_id):
 	messages = get_session(session_id)
 	model_list = OpenRouter.models()
-	if messages and messages[-1].get("model"):
-		default_model = messages[-1]["model"]
+	default_model = next((m["model"] for m in reversed(messages) if m.get("model")), None)
+	if default_model:
+		pass
 	elif model_list:
 		default_model = model_list[0]["id"]
 	else:
 		default_model = None
 	return render_template('session.html',
 						   session_id=session_id,
-						   messages=messages,
+						   turns=group_turns(messages),
 						   models=model_list,
 						   default_model=default_model)
 

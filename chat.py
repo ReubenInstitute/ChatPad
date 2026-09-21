@@ -1,5 +1,5 @@
 import datetime
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import re
 import uuid
@@ -212,25 +212,167 @@ def list_sessions():
 		timestamp_str = uuid7_timestamp(session_id)
 		messages = read_session_messages(session_id)
 		title = "(empty)"
-		if messages:
-			_, data = messages[0]
-			prompt = data.get("prompt", "")
-			if prompt:
-				title = prompt[:30]
-				if len(prompt) > 30:
-					title += "..."
+		prompt = next((r["content"] for _, d in messages for r in normalize(d) if r["type"] == "prompt"), "")
+		if prompt:
+			title = prompt[:30]
+			if len(prompt) > 30:
+				title += "..."
 		sessions.append((session_id, timestamp_str, title))
 	sessions.sort(key=lambda x: x[1], reverse=True)
 	return sessions
 
+MAX_STEPS = 5
+
+SYSTEM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "system")
+MAX_READ = 100000
+
+def _tool(name, description, properties):
+	return {
+		"type": "function",
+		"function": {
+			"name": name,
+			"description": description,
+			"parameters": {"type": "object", "properties": properties, "required": list(properties)},
+		},
+	}
+
+TOOLS = [
+	_tool("read", "Read a file, or list all files with read(\".\"). The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}}),
+	_tool("write", "Create a file, or replace it if it exists. The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("delete", "Delete a file. The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}}),
+]
+
+
+def _resolve(name):
+	# flat folder: a plain file name only, nothing that can leave system/
+	if name in ("", "."):
+		return SYSTEM_DIR
+	if name != os.path.basename(name) or name == ".." or "\\" in name:
+		raise ValueError(f"invalid name: {name} (file names only, no folders)")
+	full = os.path.join(SYSTEM_DIR, name)
+	if os.path.islink(full):
+		raise ValueError(f"invalid name: {name}")
+	return full
+
+
+def read(path):
+	full = _resolve(path)
+	if not os.path.exists(full):
+		if full == SYSTEM_DIR:
+			return "(empty)"
+		return f"not found: {path}"
+	if os.path.isdir(full):
+		lines = [f"{n}  {os.path.getsize(os.path.join(full, n))} bytes" for n in sorted(os.listdir(full))]
+		return "\n".join(lines) or "(empty)"
+	try:
+		with open(full, "r", encoding="utf-8") as f:
+			text = f.read(MAX_READ + 1)
+	except UnicodeDecodeError:
+		return f"binary file, {os.path.getsize(full)} bytes"
+	if len(text) > MAX_READ:
+		text = text[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
+	return text
+
+
+def write(path, content):
+	full = _resolve(path)
+	if full == SYSTEM_DIR or os.path.isdir(full):
+		return f"invalid name: {path}"
+	os.makedirs(SYSTEM_DIR, exist_ok=True)
+	with open(full, "w", encoding="utf-8") as f:
+		f.write(content)
+	return f"wrote {len(content)} characters to {path}"
+
+
+def delete(path):
+	full = _resolve(path)
+	if full == SYSTEM_DIR or os.path.isdir(full):
+		return f"invalid name: {path}"
+	if not os.path.exists(full):
+		return f"not found: {path}"
+	os.remove(full)
+	return f"deleted {path}"
+
+
+def run_tool(name, arguments):
+	try:
+		args = json.loads(arguments) if isinstance(arguments, str) else arguments
+		if name == "read":
+			return read(args["path"])
+		if name == "write":
+			return write(args["path"], args["content"])
+		if name == "delete":
+			return delete(args["path"])
+		return f"unknown tool: {name}"
+	except Exception as e:
+		return f"error: {type(e).__name__}: {e}"
+
+
+def normalize(data):
+	# old records hold a whole exchange; split them into typed messages
+	if "type" in data:
+		return [data]
+	records = []
+	if data.get("prompt") is not None:
+		records.append({"type": "prompt", "content": data["prompt"]})
+	if data.get("reasoning"):
+		records.append({"type": "reasoning", "content": data["reasoning"]})
+	if data.get("error"):
+		records.append({"type": "error", "error": data["error"], "model": data.get("model")})
+	if data.get("response"):
+		cost = (data.get("usage") or {}).get("cost")
+		records.append({"type": "response", "content": data["response"], "model": data.get("model"), "cost": cost})
+	return records
+
+
+def build_messages(existing):
+	records = [r for _, d in existing for r in normalize(d)]
+	messages = []
+	for turn in group_turns(records):
+		types = {r["type"] for r in turn}
+		if "error" in types and not types & {"response", "tool_call"}:
+			continue  # the prompt got no answer, don't send it
+		for r in turn:
+			t = r["type"]
+			if t == "prompt":
+				messages.append({"role": "user", "content": r["content"]})
+			elif t == "tool_call":
+				messages.append({"role": "assistant", "content": r.get("content"), "tool_calls": r["tool_calls"]})
+			elif t == "tool_result":
+				messages.append({"role": "tool", "tool_call_id": r["tool_call_id"], "content": r["content"]})
+			elif t == "response" and r.get("content"):
+				messages.append({"role": "assistant", "content": r["content"]})
+	return messages
+
+
 def get_session(session_id):
 	messages = []
 	for name, data in read_session_messages(session_id):
-		uuid_str = name[:-5]
-		timestamp_str = uuid7_timestamp(uuid_str)
-		data["timestamp"] = timestamp_str
-		messages.append(data)
+		timestamp_str = uuid7_timestamp(name[:-5])
+		for record in normalize(data):
+			record = dict(record)
+			record["timestamp"] = timestamp_str
+			messages.append(record)
 	return messages
+
+
+def group_turns(messages):
+	turns = []
+	for m in messages:
+		if m["type"] == "prompt" or not turns:
+			turns.append([])
+		turns[-1].append(m)
+	return turns
+
+
+def next_name(last_name):
+	# names sort by time, so each message must be at least 1 ms after the previous one
+	dt = datetime.now(timezone.utc)
+	if last_name:
+		last = uuid7.time(uuid.UUID(last_name[:-5]))
+		if dt < last + timedelta(milliseconds=1):
+			dt = last + timedelta(milliseconds=1)
+	return f"{uuid7.create(dt)}.json"
 
 
 def session_message(prompt, model, reasoning=True, session=None):
@@ -238,23 +380,35 @@ def session_message(prompt, model, reasoning=True, session=None):
 		session = str(uuid7.create(datetime.now(timezone.utc)))
 
 	existing = read_session_messages(session)
-	history = [[data.get("prompt", ""), data.get("response", "")] for _, data in existing]
 
-	response = OpenRouter.message(prompt, model, reasoning, history)
+	def add(record):
+		name = next_name(existing[-1][0] if existing else None)
+		record["session"] = session
+		record["uuid"] = name[:-5]
+		existing.append((name, record))
+		write_session_messages(session, existing)
 
-	msg_uuid = str(uuid7.create(datetime.now(timezone.utc)))
-	response["session"] = session
-	response["uuid"] = msg_uuid
-	response["prompt"] = prompt
-	response["model"] = model
-	if "error" not in response:
-		response["response"] = response["choices"][0]["message"]["content"]
-		response["reasoning"] = response["choices"][0]["message"].get("reasoning", "")
-
-	existing.append((f"{msg_uuid}.json", response))
-	write_session_messages(session, existing)
-
-	return response
+	add({"type": "prompt", "content": prompt, "model": model})
+	for step in range(MAX_STEPS):
+		result = OpenRouter.message(build_messages(existing), model, reasoning, TOOLS)
+		if "error" in result:
+			add({"type": "error", "error": result["error"], "model": model})
+			return {"session": session}
+		message = result["choices"][0]["message"]
+		if message.get("reasoning"):
+			add({"type": "reasoning", "content": message["reasoning"]})
+		calls = message.get("tool_calls")
+		if calls:
+			add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
+			for call in calls:
+				output = run_tool(call["function"]["name"], call["function"]["arguments"])
+				add({"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output})
+			continue
+		cost = (result.get("usage") or {}).get("cost")
+		add({"type": "response", "content": message.get("content"), "model": model, "cost": cost})
+		return {"session": session}
+	add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model})
+	return {"session": session}
 
 
 

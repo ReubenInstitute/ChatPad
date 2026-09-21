@@ -6,41 +6,67 @@
 	<h1>Session: {{ session_id }}</h1>
 
 	<div class="messages">
-	{% for msg in messages %}
+	{% for turn in turns %}
 		<div class="message">
-			<p>{{ msg.timestamp|format_timestamp }}</p>
-
-			<div class="prompt">
-				<div>
-					<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-					<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
-					<div class="content">
-						{{ msg.prompt }}
+			<p>{{ turn[0].timestamp|format_timestamp }}</p>
+			{% for msg in turn %}
+			{% if msg.type == "prompt" %}
+				<div class="prompt">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							{{ msg.content }}
+						</div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
-				<div style="display:none;">
-					<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-					<span>{{ msg.prompt[:30] }}</span>
-				</div>
-			</div>
-
-			{% if msg.reasoning %}
-			<div class="reasoning">
-				<div>
-					<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-					<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
-					<div class="content">
-						{{ msg.reasoning|markdown|safe }}
+			{% elif msg.type == "reasoning" %}
+				<div class="reasoning">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							{{ msg.content|markdown|safe }}
+						</div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
-				<div style="display:none;">
-					<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-					<span>{{ msg.reasoning[:30] }}</span>
+			{% elif msg.type == "tool_call" %}
+				<div class="tool">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							{% for call in msg.tool_calls %}<div>{{ call.function.name }}({{ call.function.arguments }})</div>{% endfor %}
+						</div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.tool_calls[0].function.name }}(...)</span>
+					</div>
 				</div>
-			</div>
-			{% endif %}
-
-			{% if msg.error %}
+			{% elif msg.type == "tool_result" %}
+				<div class="tool">
+					<div>
+						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
+						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
+						<div class="content">
+							<div>{{ msg.name }} &rarr; {{ msg.content }}</div>
+						</div>
+					</div>
+					<div style="display:none;">
+						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span>{{ msg.name }} &rarr; {{ msg.content[:20] }}</span>
+					</div>
+				</div>
+			{% elif msg.type == "error" %}
 				<div class="error">
 					<div>
 						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
@@ -58,25 +84,23 @@
 						<span>{{ msg.error.message[:30] }}</span>
 					</div>
 				</div>
-			{% endif %}
-
-			{% if msg.response %}
+			{% elif msg.type == "response" and msg.content %}
 				<div class="response">
 					<div>
 						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
 						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
-							{{ msg.response|markdown|safe }}
+							{{ msg.content|markdown|safe }}
 						</div>
 						<div class="info"><small>{{ msg.model }} ({{ msg.cost or 0 }}$)</small></div>
 					</div>
 					<div style="display:none;">
 						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-						<span>{{ msg.response[:30] }}</span>
+						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
 			{% endif %}
-
+			{% endfor %}
 		</div>
 	{% endfor %}
 	</div>

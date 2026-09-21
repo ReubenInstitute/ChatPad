@@ -11,7 +11,7 @@ function initializeChatView() {
 
 	for (let i = 0; i < messages.length - 1; i++) {
 		const message = messages[i];
-		const containers = message.querySelectorAll('.prompt, .reasoning, .error, .response');
+		const containers = message.querySelectorAll('.prompt, .reasoning, .tool, .error, .response');
 
 		containers.forEach(container => {
 			const expandedDiv = container.children[0];
