@@ -4,8 +4,9 @@ import random
 import time
 import os
 
-with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
-	API_KEY = f.read().strip()
+def api_key():
+	with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
+		return f.read().strip()
 
 class OpenRouter:
 	timeout = 120
@@ -14,7 +15,7 @@ class OpenRouter:
 
 	@staticmethod
 	def models(free=True):
-		headers = {"Authorization": f"Bearer {API_KEY}"}
+		headers = {"Authorization": f"Bearer {api_key()}"}
 		try:
 			response = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
 			data = response.json()
@@ -81,7 +82,7 @@ class OpenRouter:
 			model = random.choice(available)["id"]
 		url = "https://openrouter.ai/api/v1/chat/completions"
 		headers = {
-			"Authorization": f"Bearer {API_KEY}",
+			"Authorization": f"Bearer {api_key()}",
 			"Content-Type": "application/json"
 		}
 		payload = {

@@ -28,6 +28,11 @@
 	</form>
 	</div>
 
+	<form action="/rotate-keys" method="post">
+		<button type="submit">Rotate keys</button>
+		{% if request.args.get('rotated') %}<small>Keys rotated.</small>{% endif %}
+	</form>
+
 	<hr>
 
 	<table>

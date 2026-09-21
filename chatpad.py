@@ -5,6 +5,7 @@ import markdown
 from openrouter import OpenRouter
 from chat import session_message, list_sessions, get_session, group_turns
 import re
+from rotate_keys import rotate
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 
@@ -127,6 +128,14 @@ def api_message(session_id=None):
 	session = session_id or request.form.get('session')
 	response = session_message(prompt, model, reasoning, session)
 	return redirect(f'/session/{response["session"]}')
+
+@app.route('/rotate-keys', methods=['POST'])
+def rotate_keys():
+	try:
+		rotate()
+	except SystemExit as e:
+		return str(e), 500
+	return redirect('/?rotated=1')
 
 
 
