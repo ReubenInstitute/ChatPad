@@ -13,12 +13,14 @@ class OpenRouter:
 	@staticmethod
 	def models(free=True):
 		headers = {"Authorization": f"Bearer {API_KEY}"}
-		response = requests.get("https://openrouter.ai/api/v1/models", headers=headers)
-		data = response.json()
+		try:
+			response = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
+			data = response.json()
+			all_models = data["data"]
+		except Exception:
+			return []
 		with open("models.json", "w") as f:
 			json.dump(data, f, indent=2)
-
-		all_models = data["data"]
 		result = []
 
 		CONDITION_KEYS = {'utc_days', 'utc_start', 'utc_end', 'min_prompt_tokens'}
@@ -93,5 +95,11 @@ class OpenRouter:
 			"messages": messages,
 			"reasoning": {"enabled": think}
 		}
-		response = requests.post(url, headers=headers, json=payload)
-		return response.json()
+		try:
+			response = requests.post(url, headers=headers, json=payload, timeout=300)
+			result = response.json()
+			if "error" not in result:
+				result["choices"][0]["message"]
+		except Exception as e:
+			result = {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
+		return result
