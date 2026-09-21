@@ -258,30 +258,6 @@ def session_message(prompt, model, reasoning=True, session=None):
 
 
 
-def stream_session_message(prompt, model, reasoning, session):
-	if session is None:
-		session = str(uuid7.create(datetime.now(timezone.utc)))
-
-	existing = read_session_messages(session)
-	history = [[data.get("prompt", ""), data.get("response", "")] for _, data in existing]
-
-	def save_callback(data):
-		msg_uuid = str(uuid7.create(datetime.now(timezone.utc)))
-		data["session"] = session
-		data["uuid"] = msg_uuid
-		data["prompt"] = prompt
-		data["model"] = model
-		if "error" not in data:
-			data["response"] = data["choices"][0]["message"]["content"]
-			data["reasoning"] = data["choices"][0]["message"].get("reasoning", "")
-		existing.append((f"{msg_uuid}.json", data))
-		write_session_messages(session, existing)
-
-	for chunk in OpenRouter.stream_message(prompt, model, reasoning, history, on_complete=save_callback):
-		yield chunk
-
-
-
 if __name__ == "__main__":
 	import json
 

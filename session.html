@@ -84,7 +84,7 @@
 	<hr>
 
 	<div class="chatbox">
-	<form method="post">
+	<form action="/api/message/{{ session_id }}" method="post">
 		<div>
 			<input type="checkbox" name="reasoning" checked>
 			<label for="reasoning">Reasoning</label>
@@ -110,48 +110,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     initializeChatView();
-    document.querySelector('form').addEventListener('submit', handleStreamingSubmit);
 });
 </script>
-
-
-<template id="message-template">
-	<div class="message">
-		<div class="prompt">
-			<div>
-				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
-				<div class="content"></div>
-			</div>
-			<div style="display:none;">
-				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-				<span></span>
-			</div>
-		</div>
-		<div class="reasoning" style="display:none;">
-			<div>
-				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
-				<div class="content"></div>
-			</div>
-			<div style="display:none;">
-				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-				<span></span>
-			</div>
-		</div>
-		<div class="response">
-			<div>
-				<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-				<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
-				<div class="content"></div>
-				<div class="info"><small></small></div>
-			</div>
-			<div style="display:none;">
-				<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-				<span></span>
-			</div>
-		</div>
-	</div>
-</template>
 
 {% endblock %}

@@ -1,10 +1,9 @@
-import json
 import os
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
+from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, stream_session_message
+from chat import session_message, list_sessions, get_session
 import re
 
 app = Flask(__name__, template_folder='.', static_folder='.')
@@ -77,19 +76,6 @@ def raw_view(session_id):
         text_parts.append('')
     export_text = '\n\n'.join(text_parts).strip()
     return export_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
-
-
-@app.route('/stream/<session_id>', methods=['POST'])
-def stream_route(session_id):
-	prompt = request.form['prompt']
-	model = request.form['model']
-	reasoning = 'reasoning' in request.form
-	def generate():
-		for chunk in stream_session_message(prompt, model, reasoning, session_id):
-			yield f"data: {json.dumps(chunk)}\n\n"
-	return Response(generate(), mimetype='text/event-stream')
-
-
 
 
 @app.route('/models')
