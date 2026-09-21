@@ -6,6 +6,11 @@ import uuid
 import uuid7
 import json
 import tarfile
+import shutil
+import socket
+import ipaddress
+from urllib.parse import urlparse, urljoin
+import requests
 import io
 
 from openrouter import OpenRouter
@@ -225,33 +230,45 @@ MAX_STEPS = 5
 
 SYSTEM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "system")
 MAX_READ = 100000
+MAX_SAVE = 10 * 1024 * 1024
 
-def _tool(name, description, properties):
+def _tool(name, description, properties, required=None):
 	return {
 		"type": "function",
 		"function": {
 			"name": name,
 			"description": description,
-			"parameters": {"type": "object", "properties": properties, "required": list(properties)},
+			"parameters": {"type": "object", "properties": properties, "required": list(properties) if required is None else required},
 		},
 	}
 
 TOOLS = [
-	_tool("read", "Read a file, or list all files with read(\".\"). The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}}),
-	_tool("write", "Create a file, or replace it if it exists. The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}, "content": {"type": "string"}}),
-	_tool("delete", "Delete a file. The workspace is one flat folder: file names only, no subfolders.", {"path": {"type": "string"}}),
+	_tool("read", "Read a file, or list a folder (read(\".\") lists the top level). Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("write", "Create a file, or replace it if it exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("edit", "Replace one piece of text in a file. `old` must appear exactly once; include enough surrounding text to make it unique. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
+	_tool("append", "Add text to the end of a file, creating it if needed. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("rename", "Rename a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("copy", "Copy a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("fetch", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
+	_tool("delete", "Delete a file. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("mkdir", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("rmdir", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 ]
 
 
 def _resolve(name):
-	# flat folder: a plain file name only, nothing that can leave system/
-	if name in ("", "."):
+	# a relative path inside system/; no "..", no absolute paths, no symlinks
+	if name.strip("/") in ("", "."):
 		return SYSTEM_DIR
-	if name != os.path.basename(name) or name == ".." or "\\" in name:
-		raise ValueError(f"invalid name: {name} (file names only, no folders)")
-	full = os.path.join(SYSTEM_DIR, name)
-	if os.path.islink(full):
-		raise ValueError(f"invalid name: {name}")
+	if "\\" in name or name.startswith("/"):
+		raise ValueError(f"invalid path: {name}")
+	full = SYSTEM_DIR
+	for part in name.rstrip("/").split("/"):
+		if part in ("", ".", ".."):
+			raise ValueError(f"invalid path: {name}")
+		full = os.path.join(full, part)
+		if os.path.islink(full):
+			raise ValueError(f"invalid path: {name}")
 	return full
 
 
@@ -262,7 +279,10 @@ def read(path):
 			return "(empty)"
 		return f"not found: {path}"
 	if os.path.isdir(full):
-		lines = [f"{n}  {os.path.getsize(os.path.join(full, n))} bytes" for n in sorted(os.listdir(full))]
+		lines = []
+		for n in sorted(os.listdir(full)):
+			p = os.path.join(full, n)
+			lines.append(f"{n}/" if os.path.isdir(p) else f"{n}  {os.path.getsize(p)} bytes")
 		return "\n".join(lines) or "(empty)"
 	try:
 		with open(full, "r", encoding="utf-8") as f:
@@ -279,19 +299,167 @@ def write(path, content):
 	if full == SYSTEM_DIR or os.path.isdir(full):
 		return f"invalid name: {path}"
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
+	if not os.path.isdir(os.path.dirname(full)):
+		return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(content)
 	return f"wrote {len(content)} characters to {path}"
 
 
-def delete(path):
+def _existing_file(path):
+	full = _resolve(path)
+	if full == SYSTEM_DIR or os.path.isdir(full):
+		raise ValueError(f"invalid name: {path}")
+	if not os.path.exists(full):
+		raise FileNotFoundError(f"not found: {path}")
+	return full
+
+
+def edit(path, old, new):
+	full = _existing_file(path)
+	if not old:
+		return "old must not be empty"
+	with open(full, "r", encoding="utf-8") as f:
+		text = f.read()
+	count = text.count(old)
+	if count == 0:
+		return f"text not found in {path}"
+	if count > 1:
+		return f"text found {count} times in {path}; add more surrounding text to make it unique"
+	with open(full, "w", encoding="utf-8") as f:
+		f.write(text.replace(old, new))
+	return f"edited {path}"
+
+
+def append(path, content):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
 		return f"invalid name: {path}"
+	os.makedirs(SYSTEM_DIR, exist_ok=True)
+	if not os.path.isdir(os.path.dirname(full)):
+		return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
+	with open(full, "a", encoding="utf-8") as f:
+		f.write(content)
+	return f"appended {len(content)} characters to {path}"
+
+
+def _move_or_copy(path, new_path, action):
+	source = _existing_file(path)
+	target = _resolve(new_path)
+	if target == SYSTEM_DIR or os.path.isdir(target):
+		return f"invalid name: {new_path}"
+	if os.path.lexists(target):
+		return f"already exists: {new_path}"
+	if not os.path.isdir(os.path.dirname(target)):
+		return f"folder does not exist: {os.path.dirname(new_path)} (create it with mkdir)"
+	if action == "rename":
+		os.rename(source, target)
+	else:
+		shutil.copyfile(source, target)
+	return f"{'renamed' if action == 'rename' else 'copied'} {path} to {new_path}"
+
+
+def rename(path, new_path):
+	return _move_or_copy(path, new_path, "rename")
+
+
+def copy(path, new_path):
+	return _move_or_copy(path, new_path, "copy")
+
+
+def _check_url(url):
+	parts = urlparse(url)
+	if parts.scheme not in ("http", "https") or not parts.hostname:
+		raise ValueError(f"invalid url: {url} (http or https only)")
+	for info in socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)):
+		ip = ipaddress.ip_address(info[4][0])
+		if not ip.is_global:
+			raise ValueError(f"blocked: {parts.hostname} is not a public address")
+
+
+def _get(url):
+	for _ in range(6):
+		_check_url(url)
+		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20, stream=True, allow_redirects=False)
+		if response.is_redirect:
+			url = urljoin(url, response.headers["Location"])
+			continue
+		return response
+	raise ValueError("too many redirects")
+
+
+def fetch(url, path=None):
+	target = None
+	if path:
+		target = _resolve(path)
+		if target == SYSTEM_DIR or os.path.isdir(target):
+			return f"invalid name: {path}"
+		os.makedirs(SYSTEM_DIR, exist_ok=True)
+		if not os.path.isdir(os.path.dirname(target)):
+			return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
+	response = _get(url)
+	if response.status_code != 200:
+		return f"HTTP {response.status_code}"
+	limit = MAX_SAVE if target else MAX_READ * 4
+	data = b""
+	for chunk in response.iter_content(65536):
+		data += chunk
+		if len(data) > limit:
+			break
+	truncated = len(data) > limit
+	if target:
+		if truncated:
+			return f"too large: over {MAX_SAVE} bytes, not saved"
+		with open(target, "wb") as f:
+			f.write(data)
+		return f"saved {len(data)} bytes to {path}"
+	try:
+		text = data.decode("utf-8")
+	except UnicodeDecodeError:
+		if not truncated:
+			return f"binary file, {len(data)} bytes"
+		text = data.decode("utf-8", errors="ignore")
+	if len(text) > MAX_READ:
+		text = text[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
+	return text
+
+
+def delete(path):
+	full = _resolve(path)
+	if full == SYSTEM_DIR:
+		return f"invalid name: {path}"
+	if os.path.isdir(full):
+		return f"{path} is a folder, use rmdir"
 	if not os.path.exists(full):
 		return f"not found: {path}"
 	os.remove(full)
 	return f"deleted {path}"
+
+
+def mkdir(path):
+	full = _resolve(path)
+	if full == SYSTEM_DIR:
+		return f"invalid name: {path}"
+	if os.path.isdir(full):
+		return f"already exists: {path}"
+	if os.path.exists(full):
+		return f"a file with that name exists: {path}"
+	os.makedirs(full)
+	return f"created folder {path}"
+
+
+def rmdir(path):
+	full = _resolve(path)
+	if full == SYSTEM_DIR:
+		return f"invalid name: {path}"
+	if not os.path.exists(full):
+		return f"not found: {path}"
+	if not os.path.isdir(full):
+		return f"{path} is a file, use delete"
+	if os.listdir(full):
+		return f"folder is not empty: {path}"
+	os.rmdir(full)
+	return f"removed folder {path}"
 
 
 def run_tool(name, arguments):
@@ -301,8 +469,22 @@ def run_tool(name, arguments):
 			return read(args["path"])
 		if name == "write":
 			return write(args["path"], args["content"])
+		if name == "edit":
+			return edit(args["path"], args["old"], args["new"])
+		if name == "append":
+			return append(args["path"], args["content"])
+		if name == "rename":
+			return rename(args["path"], args["new_path"])
+		if name == "copy":
+			return copy(args["path"], args["new_path"])
+		if name == "fetch":
+			return fetch(args["url"], args.get("path"))
 		if name == "delete":
 			return delete(args["path"])
+		if name == "mkdir":
+			return mkdir(args["path"])
+		if name == "rmdir":
+			return rmdir(args["path"])
 		return f"unknown tool: {name}"
 	except Exception as e:
 		return f"error: {type(e).__name__}: {e}"
@@ -404,6 +586,10 @@ def session_message(prompt, model, reasoning=True, session=None):
 				output = run_tool(call["function"]["name"], call["function"]["arguments"])
 				add({"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output})
 			continue
+		if not message.get("content"):
+			reason = result["choices"][0].get("finish_reason")
+			add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model})
+			return {"session": session}
 		cost = (result.get("usage") or {}).get("cost")
 		add({"type": "response", "content": message.get("content"), "model": model, "cost": cost})
 		return {"session": session}
