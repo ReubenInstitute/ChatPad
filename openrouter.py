@@ -26,12 +26,9 @@ class OpenRouter:
 		CONDITION_KEYS = {'utc_days', 'utc_start', 'utc_end', 'min_prompt_tokens'}
 
 		for model in all_models:
-			if OpenRouter.free_only:
-				raw_pricing = model.get("pricing", {})
-				# Keep original free-only logic unchanged: check all values equal 0.0
-				if free:
-					if not all(float(v) == 0.0 for v in raw_pricing.values() if isinstance(v, (int, float))):
-						continue
+			if OpenRouter.free_only and free:
+				if not model.get("id", "").endswith(":free"):
+					continue
 
 			raw_pricing = model.get("pricing", {})
 
