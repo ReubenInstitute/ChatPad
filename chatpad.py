@@ -91,12 +91,18 @@ def raw_view(session_id):
     return export_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
+def model_icons():
+	icons = {}
+	for f in os.listdir(os.path.join(ROOT, "@@", "models")):
+		icons[os.path.splitext(f)[0]] = f"/@@/models/{f}"
+	return icons
+
 @app.route('/models')
 def show_models():
 	models = OpenRouter.models(free=False)
 	free = [m for m in models if m["id"].endswith(":free")]
 	other = [m for m in models if not m["id"].endswith(":free")]
-	return render_template('models.html', free=free, other=other)
+	return render_template('models.html', free=free, other=other, icons=model_icons())
 
 @app.route('/')
 def index():
@@ -125,7 +131,8 @@ def view_session(session_id):
 						   session_id=session_id,
 						   turns=group_turns(messages),
 						   models=model_list,
-						   default_model=default_model)
+						   default_model=default_model,
+						   icons=model_icons())
 
 @app.route('/session/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):

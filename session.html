@@ -8,6 +8,8 @@
 	<div class="messages">
 	{% for turn in turns %}
 		<div class="message">
+			{% set resp_msgs = turn | selectattr('type', 'equalto', 'response') | list %}
+			{% set resp = resp_msgs[0] if resp_msgs and resp_msgs[0].content else None %}
 			{% for msg in turn %}
 			{% if msg.type == "prompt" %}
 				<div class="prompt" onclick="toggleMessage(this)">
@@ -22,6 +24,13 @@
 						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
+				{% if resp %}
+				<div class="info">
+					{% set icon = icons.get(resp.model.split('/')[0].lstrip('~')) if resp.model else None %}
+					{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}
+					<small>{{ resp.model }}</small>
+				</div>
+				{% endif %}
 			{% elif msg.type == "reasoning" %}
 				<div class="reasoning" onclick="toggleMessage(this)">
 					<div>
@@ -85,7 +94,6 @@
 						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
-				<div class="info"><small>{{ msg.model }} ({{ msg.cost or 0 }}$)</small></div>
 			{% endif %}
 			{% endfor %}
 		</div>

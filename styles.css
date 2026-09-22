@@ -118,6 +118,9 @@ nav {
 
 .message .info {
 	color: #333;
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	}
 
 
@@ -270,4 +273,11 @@ th {
 
 td.cap {
 	text-align: center;
+}
+
+.model-icon {
+	width: 20px;
+	height: 20px;
+	object-fit: contain;
+	vertical-align: middle;
 }

@@ -2,10 +2,11 @@
 
 {% block title %}Models{% endblock %}
 
-{% macro models_table(models) %}
+{% macro models_table(models, icons) %}
 	<table>
 		<thead>
 			<tr>
+				<th></th>
 				<th>Name</th>
 				<th>Description</th>
 				<th>Context Length</th>
@@ -24,6 +25,10 @@
 		<tbody>
 		{% for model in models %}
 			<tr>
+				<td>
+					{% set icon = icons.get(model.id.split('/')[0].lstrip('~')) %}
+					{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}
+				</td>
 				<td>{{ model.name }}</td>
 				<td>{{ model.description }}</td>
 				<td>{{ model.context_length|format_number }}</td>
@@ -73,8 +78,8 @@
 
 {% block content %}
 	<h1>Free Models ({{ free|length }})</h1>
-	{{ models_table(free) }}
+	{{ models_table(free, icons) }}
 
 	<h1>Other Models ({{ other|length }})</h1>
-	{{ models_table(other) }}
+	{{ models_table(other, icons) }}
 {% endblock %}
