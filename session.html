@@ -5,82 +5,63 @@
 {% block content %}
 	<h1>Session: {{ session_id }}</h1>
 
-	{% if request.path.startswith('/archive/') %}
-	<form action="/session/{{ session_id }}/unarchive" method="post">
-		<button type="submit">Unarchive</button>
-	</form>
-	{% else %}
-	<form action="/session/{{ session_id }}/archive" method="post">
-		<button type="submit">Archive</button>
-	</form>
-	{% endif %}
-
 	<div class="messages">
 	{% for turn in turns %}
 		<div class="message">
-			<p>{{ turn[0].timestamp|format_timestamp }}</p>
 			{% for msg in turn %}
 			{% if msg.type == "prompt" %}
-				<div class="prompt">
+				<div class="prompt" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
+							<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
 							{{ msg.content }}
 						</div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
+						<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
 						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
 			{% elif msg.type == "reasoning" %}
-				<div class="reasoning">
+				<div class="reasoning" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
 						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
 			{% elif msg.type == "tool_call" %}
-				<div class="tool">
+				<div class="tool" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
-							{% for call in msg.tool_calls %}<div>{{ call.function.name }}({{ call.function.arguments }})</div>{% endfor %}
+							{% for call in msg.tool_calls %}
+							<div class="tool-summary">{{ tool_summary(call.function.name, call.function.arguments) }}</div>
+							<div class="tool-raw">{{ call.function.name }}({{ call.function.arguments }})</div>
+							{% endfor %}
 						</div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-						<span>{{ msg.tool_calls[0].function.name }}(...)</span>
+						<span>{{ tool_summary(msg.tool_calls[0].function.name, msg.tool_calls[0].function.arguments) }}</span>
 					</div>
 				</div>
 			{% elif msg.type == "tool_result" %}
-				<div class="tool">
+				<div class="tool" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
-							<div>{{ msg.name }} &rarr; {{ msg.content }}</div>
+							<div class="tool-summary">{{ msg.name }} result</div>
+							<div class="tool-raw">{{ msg.content }}</div>
 						</div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
-						<span>{{ msg.name }} &rarr; {{ msg.content[:20] }}</span>
+						<span>{{ msg.name }} result</span>
 					</div>
 				</div>
 			{% elif msg.type == "error" %}
-				<div class="error">
+				<div class="error" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
 							<p>{{ msg.error.message }}</p>
 							<small>Code: {{ msg.error.code }}</small>
@@ -90,35 +71,41 @@
 						</div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
 						<span>{{ msg.error.message[:30] }}</span>
 					</div>
 				</div>
 			{% elif msg.type == "response" and msg.content %}
-				<div class="response">
+				<div class="response" onclick="toggleMessage(this)">
 					<div>
-						<i class="fa-regular fa-copy copy-button" onclick="copyContent(this)"></i>
-						<i class="fa-solid fa-chevron-up collapse-button" onclick="collapse(this)"></i>
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
-						<div class="info"><small>{{ msg.model }} ({{ msg.cost or 0 }}$)</small></div>
 					</div>
 					<div style="display:none;">
-						<i class="fa-solid fa-chevron-down expand-button" onclick="expand(this)"></i>
 						<span>{{ msg.content[:30] }}</span>
 					</div>
 				</div>
+				<div class="info"><small>{{ msg.model }} ({{ msg.cost or 0 }}$)</small></div>
 			{% endif %}
 			{% endfor %}
 		</div>
 	{% endfor %}
 	</div>
 
-	{% if not request.path.startswith('/archive/') %}
-	<hr>
+	{% if request.path.startswith('/archive/') %}
+	<form action="/session/{{ session_id }}/unarchive" method="post">
+		<button type="submit">Unarchive</button>
+	</form>
+	{% else %}
+	<form class="chatbox-clearance" action="/session/{{ session_id }}/archive" method="post">
+		<button type="submit">Archive</button>
+	</form>
+	{% endif %}
 
-	<div class="chatbox">
+	{% if not request.path.startswith('/archive/') %}
+
+	<div class="chatbox-bar">
+	<div class="chatbox chatbox-fixed">
 	<form action="/api/message/{{ session_id }}" method="post">
 		<div class="opt-reasoning">
 			<input type="checkbox" name="reasoning" id="reasoning" checked>
@@ -139,6 +126,7 @@
 
 		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
 	</form>
+	</div>
 	</div>
 	{% endif %}
 

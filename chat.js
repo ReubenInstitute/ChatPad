@@ -9,11 +9,11 @@ function copyContent(element) {
 function initializeChatView() {
 	const messages = document.querySelectorAll('.message');
 
-	for (let i = 0; i < messages.length - 1; i++) {
-		const message = messages[i];
-		const containers = message.querySelectorAll('.prompt, .reasoning, .tool, .error, .response');
+	messages.forEach((message, i) => {
+		const isLast = i === messages.length - 1;
+		const selector = isLast ? '.tool' : '.prompt, .reasoning, .tool, .error, .response';
 
-		containers.forEach(container => {
+		message.querySelectorAll(selector).forEach(container => {
 			const expandedDiv = container.children[0];
 			const collapsedDiv = container.children[1];
 
@@ -22,7 +22,7 @@ function initializeChatView() {
 				collapsedDiv.style.display = 'block';
 			}
 		});
-	}
+	});
 
 	window.scrollTo(0, document.body.scrollHeight);
 }
@@ -40,17 +40,11 @@ function initializeChatView() {
 
 
 
-function collapse(element) {
-	const container = element.parentElement.parentElement;
+function toggleMessage(container) {
+	if (window.getSelection().toString()) return;
 	const expanded = container.children[0];
 	const collapsed = container.children[1];
-	expanded.style.display = 'none';
-	collapsed.style.display = 'block';
-}
-function expand(element) {
-	const container = element.parentElement.parentElement;
-	const expanded = container.children[0];
-	const collapsed = container.children[1];
-	expanded.style.display = 'block';
-	collapsed.style.display = 'none';
+	const isExpanded = expanded.style.display !== 'none';
+	expanded.style.display = isExpanded ? 'none' : 'block';
+	collapsed.style.display = isExpanded ? 'block' : 'none';
 }

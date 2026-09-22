@@ -4,7 +4,6 @@
 {% endblock %}
 
 {% block content %}
-	<h1>New Chat</h1>
 	<div class="chatbox">
 	<form action="/api/message" method="post">
 		<div class="opt-reasoning">
@@ -28,16 +27,9 @@
 	</form>
 	</div>
 
-	<form action="/rotate-keys" method="post">
-		<button type="submit">Rotate keys</button>
-		{% if request.args.get('rotated') %}<small>Keys rotated.</small>{% endif %}
-	</form>
-
-	<hr>
-
 	<table>
 		<tr>
-			<th>Created</th>
+			<th>Date</th>
 			<th>Session</th>
 		</tr>
 		{% for session_id, timestamp, title in sessions %}
@@ -47,6 +39,11 @@
 		</tr>
 		{% endfor %}
 	</table>
+
+	<form action="/rotate-keys" method="post">
+		<button type="submit">Rotate keys</button>
+		{% if request.args.get('rotated') %}<small>Keys rotated.</small>{% endif %}
+	</form>
 
 
 {% endblock %}

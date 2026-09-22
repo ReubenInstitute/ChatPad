@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session
+from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary
 import re
 from rotate_keys import rotate
 
@@ -52,6 +52,18 @@ def format_timestamp_filter(ts):
 		return dt.strftime('%d %b %Y %H:%M:%S')
 	except:
 		return ts
+
+@app.template_filter('format_time')
+def format_time_filter(ts):
+	if not ts:
+		return ""
+	try:
+		dt = datetime.strptime(ts[:14], '%Y%m%d%H%M%S')
+		return dt.strftime('%H:%M:%S')
+	except:
+		return ts
+
+app.jinja_env.globals['tool_summary'] = tool_summary
 
 @app.template_filter('markdown')
 def markdown_filter(text):

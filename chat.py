@@ -650,6 +650,49 @@ def run_tool(name, arguments):
 		return f"error: {type(e).__name__}: {e}"
 
 
+def tool_summary(name, arguments):
+	try:
+		args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
+	except Exception:
+		args = {}
+	if name == "read":
+		return f"Read {args.get('path', '?')}"
+	if name == "write":
+		return f"Wrote {args.get('path', '?')}"
+	if name == "edit":
+		return f"Edited {args.get('path', '?')}"
+	if name == "append":
+		return f"Appended to {args.get('path', '?')}"
+	if name == "rename":
+		return f"Renamed {args.get('path', '?')} to {args.get('new_path', '?')}"
+	if name == "copy":
+		return f"Copied {args.get('path', '?')} to {args.get('new_path', '?')}"
+	if name == "fetch":
+		if args.get("path"):
+			return f"Downloaded {args.get('url', '?')} to {args['path']}"
+		return f"Fetched {args.get('url', '?')}"
+	if name == "delete":
+		return f"Deleted {args.get('path', '?')}"
+	if name == "current_time":
+		return "Checked the current time"
+	if name == "calculator":
+		return f"Calculated {args.get('expression', '?')}"
+	if name == "todo":
+		item = args.get("item")
+		return f"Todo {args.get('action', '?')}" + (f": {item}" if item else "")
+	if name == "run_python":
+		code = (args.get("code") or "").strip().splitlines()
+		return f"Ran Python: {code[0][:40]}" if code else "Ran Python"
+	if name == "run_command":
+		command = (args.get("command") or "").strip()
+		return f"Ran: {command[:40]}"
+	if name == "mkdir":
+		return f"Created folder {args.get('path', '?')}"
+	if name == "rmdir":
+		return f"Removed folder {args.get('path', '?')}"
+	return name
+
+
 def normalize(data):
 	# old records hold a whole exchange; split them into typed messages
 	if "type" in data:

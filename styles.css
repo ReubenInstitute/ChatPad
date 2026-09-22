@@ -10,6 +10,7 @@
 	--table-th-bg: #f0f0f0;
 	--reasoning-text: #6666cc;
 	--prompt-text: #b8960f;
+	--time-text: #2e8b40;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +26,7 @@
 		--table-th-bg: #2c2c2c;
 		--reasoning-text: #7ba8d4;
 		--prompt-text: #e5c34a;
+		--time-text: #6fcf7a;
 	}
 }
 
@@ -46,31 +48,35 @@ nav {
 }
 
 .message {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.turn-time {
+	font-size: 0.75rem;
+	color: var(--time-text);
+	margin-right: 0.5em;
 }
 
 .prompt {
 	background: var(--card-bg);
 	padding: 10px;
 	border-radius: 4px;
-	margin-left: 2em;
 	color: var(--prompt-text);
 }
 
 .reasoning {
-	padding: 5px 10px;
 	border-radius: 4px;
 	font-style: italic;
 	font-size: 0.9rem;
-	margin: 10px 0;
 	color: var(--reasoning-text);
 }
 
 .tool {
 	padding: 5px 10px;
 	border-radius: 4px;
-	font-family: monospace;
-	font-size: 0.85rem;
-	margin: 10px 0;
+	font-size: 0.75rem;
 	background: var(--card-bg);
 }
 
@@ -81,19 +87,33 @@ nav {
 	background: var(--error-bg);
 	color: var(--error-text);
 	padding: 5px 10px;
-	margin: 10px 0;
 	border-radius: 4px;
 }
 
-.message i {
-	text-align: right;
-	float: right;
-	color: #999;
+.prompt, .reasoning, .tool, .error, .response {
+	cursor: pointer;
 	}
 
 .message .content {
 	xoverflow: hidden;
 	transition: max-height 0.3s ease;
+	overflow-wrap: anywhere;
+}
+
+.message .content p {
+	margin: 0;
+}
+
+.message .content p + p {
+	margin-top: 0.6em;
+}
+
+.tool-raw {
+	margin-top: 4px;
+	color: #999;
+	font-size: 0.85em;
+	white-space: pre-wrap;
+	word-break: break-all;
 }
 
 .message .info {
@@ -102,12 +122,36 @@ nav {
 
 
 .chatbox {
-	position: sticky;
-	bottom: 10px;
 	background: var(--card-bg);
 	padding: 10px 12px;
-	border-radius: 20px;
+	border-radius: 4px;
 	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+	}
+
+.chatbox-clearance {
+	margin-bottom: 140px;
+	}
+
+.chatbox-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: var(--bg);
+	padding: 10px 0;
+	z-index: 10;
+	}
+
+.chatbox.chatbox-fixed {
+	width: min(760px, calc(100% - 40px));
+	box-sizing: border-box;
+	margin: 0 auto;
+	}
+
+.messages {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 	}
 
 .chatbox form {
@@ -115,6 +159,17 @@ nav {
 	grid-template-columns: auto minmax(0, 1fr) auto;
 	gap: 6px 10px;
 	align-items: end;
+	}
+
+button {
+	border: none;
+	border-radius: 4px;
+	padding: 8px 16px;
+	margin: 10px 0;
+	background: var(--link);
+	color: #ffffff;
+	font-size: 0.9rem;
+	cursor: pointer;
 	}
 
 .chatbox .input {
@@ -127,6 +182,7 @@ nav {
 	grid-row: 1;
 	width: 42px;
 	height: 42px;
+	margin: 0;
 	border: none;
 	border-radius: 50%;
 	background: var(--link);
@@ -163,7 +219,7 @@ nav {
 	max-height: 200px;
 	padding: 10px 16px;
 	border: 1px solid var(--table-border);
-	border-radius: 21px;
+	border-radius: 4px;
 	background: var(--bg);
 	color: var(--text);
 	font: inherit;
@@ -175,6 +231,9 @@ nav {
 pre {
 	font-size: 80%;
 	background-color: var(--card-bg);
+	max-width: 100%;
+	overflow-x: auto;
+	box-sizing: border-box;
 	}
 
 
