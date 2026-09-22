@@ -48,3 +48,39 @@ function toggleMessage(container) {
 	expanded.style.display = isExpanded ? 'none' : 'block';
 	collapsed.style.display = isExpanded ? 'block' : 'none';
 }
+
+const TOOLS_STORAGE_KEY = 'chatpad-enabled-tools';
+
+function toggleTool(el) {
+	const input = el.nextElementSibling;
+	const enabled = el.classList.toggle('enabled');
+	input.disabled = !enabled;
+}
+
+function restoreEnabledTools() {
+	let enabled;
+	try {
+		enabled = JSON.parse(localStorage.getItem(TOOLS_STORAGE_KEY)) || [];
+	} catch (e) {
+		enabled = [];
+	}
+	document.querySelectorAll('.tool-toggle').forEach(el => {
+		const input = el.nextElementSibling;
+		const on = enabled.includes(el.dataset.name);
+		el.classList.toggle('enabled', on);
+		input.disabled = !on;
+	});
+}
+
+function saveEnabledTools() {
+	const enabled = Array.from(document.querySelectorAll('.tool-toggle.enabled')).map(el => el.dataset.name);
+	localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify(enabled));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+	restoreEnabledTools();
+	const form = document.querySelector('.chatbox form');
+	if (form) {
+		form.addEventListener('submit', saveEnabledTools);
+	}
+});

@@ -121,7 +121,7 @@
 		</div>
 		<div class="opt-model">
 			<select name="model" id="model">
-				{% for model in models %}
+				{% for model in MODELS %}
 					<option value="{{ model.id }}" {% if model.id == default_model %}selected{% endif %}>
 						{{ model.id }}
 					</option>
@@ -130,6 +130,13 @@
 		</div>
 		<div class="input">
 			<textarea name="prompt" id="prompt" rows="2" placeholder="Message" required></textarea>
+		</div>
+
+		<div class="opt-tools">
+			{% for tool in TOOLS %}
+				<div class="tool-toggle" data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>
+				<input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
+			{% endfor %}
 		</div>
 
 		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>

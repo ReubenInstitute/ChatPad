@@ -271,21 +271,21 @@ def _tool(name, description, properties, required=None):
 	}
 
 TOOLS = [
-	_tool("read", "Read a file, or list a folder (read(\".\") lists the top level). Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
-	_tool("write", "Create a file, or replace it if it exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
-	_tool("edit", "Replace one piece of text in a file. `old` must appear exactly once; include enough surrounding text to make it unique. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
-	_tool("append", "Add text to the end of a file, creating it if needed. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
-	_tool("rename", "Rename a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
-	_tool("copy", "Copy a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
-	_tool("fetch", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
-	_tool("delete", "Delete a file. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("read_file", "Read a file, or list a folder (read_file(\".\") lists the top level). Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("write_file", "Create a file, or replace it if it exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("edit_file", "Replace one piece of text in a file. `old` must appear exactly once; include enough surrounding text to make it unique. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
+	_tool("append_file", "Add text to the end of a file, creating it if needed. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("rename_file", "Rename a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("copy_file", "Copy a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("fetch_url", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
+	_tool("delete_file", "Delete a file. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 	_tool("current_time", "Get the current date and time on the server.", {}),
 	_tool("calculator", "Evaluate an arithmetic expression exactly. Supports + - * / // % **, parentheses, pi, e, and sqrt sin cos tan log log10 exp floor ceil abs round min max.", {"expression": {"type": "string"}}),
 	_tool("todo", "Keep a todo list (stored in todo.md in the workspace). Actions: add (item is the text), done (item is the number), remove (item is the number), list. Returns the updated list.", {"action": {"type": "string", "enum": ["add", "done", "remove", "list"]}, "item": {"type": "string"}}, required=["action"]),
 	_tool("run_python", "Run Python 3 code in the workspace folder and return what it prints, including errors. Each call is a fresh process, so print anything you want to see.", {"code": {"type": "string"}}),
 	_tool("run_command", "Run a shell command in the workspace folder and return its output, including errors. Each call is a fresh shell, so cd does not carry over; pipes and && work.", {"command": {"type": "string"}}),
-	_tool("mkdir", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
-	_tool("rmdir", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("make_folder", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("remove_folder", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 ]
 
 
@@ -305,7 +305,7 @@ def _resolve(name):
 	return full
 
 
-def read(path):
+def read_file(path):
 	full = _resolve(path)
 	if not os.path.exists(full):
 		if full == SYSTEM_DIR:
@@ -327,13 +327,13 @@ def read(path):
 	return text
 
 
-def write(path, content):
+def write_file(path, content):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
 		return f"invalid name: {path}"
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
 	if not os.path.isdir(os.path.dirname(full)):
-		return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
+		return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(content)
 	return f"wrote {len(content)} characters to {path}"
@@ -348,7 +348,7 @@ def _existing_file(path):
 	return full
 
 
-def edit(path, old, new):
+def edit_file(path, old, new):
 	full = _existing_file(path)
 	if not old:
 		return "old must not be empty"
@@ -364,13 +364,13 @@ def edit(path, old, new):
 	return f"edited {path}"
 
 
-def append(path, content):
+def append_file(path, content):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
 		return f"invalid name: {path}"
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
 	if not os.path.isdir(os.path.dirname(full)):
-		return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
+		return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
 	with open(full, "a", encoding="utf-8") as f:
 		f.write(content)
 	return f"appended {len(content)} characters to {path}"
@@ -384,7 +384,7 @@ def _move_or_copy(path, new_path, action):
 	if os.path.lexists(target):
 		return f"already exists: {new_path}"
 	if not os.path.isdir(os.path.dirname(target)):
-		return f"folder does not exist: {os.path.dirname(new_path)} (create it with mkdir)"
+		return f"folder does not exist: {os.path.dirname(new_path)} (create it with make_folder)"
 	if action == "rename":
 		os.rename(source, target)
 	else:
@@ -392,11 +392,11 @@ def _move_or_copy(path, new_path, action):
 	return f"{'renamed' if action == 'rename' else 'copied'} {path} to {new_path}"
 
 
-def rename(path, new_path):
+def rename_file(path, new_path):
 	return _move_or_copy(path, new_path, "rename")
 
 
-def copy(path, new_path):
+def copy_file(path, new_path):
 	return _move_or_copy(path, new_path, "copy")
 
 
@@ -421,7 +421,7 @@ def _get(url):
 	raise ValueError("too many redirects")
 
 
-def fetch(url, path=None):
+def fetch_url(url, path=None):
 	target = None
 	if path:
 		target = _resolve(path)
@@ -429,7 +429,7 @@ def fetch(url, path=None):
 			return f"invalid name: {path}"
 		os.makedirs(SYSTEM_DIR, exist_ok=True)
 		if not os.path.isdir(os.path.dirname(target)):
-			return f"folder does not exist: {os.path.dirname(path)} (create it with mkdir)"
+			return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
 	response = _get(url)
 	if response.status_code != 200:
 		return f"HTTP {response.status_code}"
@@ -457,19 +457,19 @@ def fetch(url, path=None):
 	return text
 
 
-def delete(path):
+def delete_file(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
 		return f"invalid name: {path}"
 	if os.path.isdir(full):
-		return f"{path} is a folder, use rmdir"
+		return f"{path} is a folder, use remove_folder"
 	if not os.path.exists(full):
 		return f"not found: {path}"
 	os.remove(full)
 	return f"deleted {path}"
 
 
-def mkdir(path):
+def make_folder(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
 		return f"invalid name: {path}"
@@ -481,14 +481,14 @@ def mkdir(path):
 	return f"created folder {path}"
 
 
-def rmdir(path):
+def remove_folder(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
 		return f"invalid name: {path}"
 	if not os.path.exists(full):
 		return f"not found: {path}"
 	if not os.path.isdir(full):
-		return f"{path} is a file, use delete"
+		return f"{path} is a file, use delete_file"
 	if os.listdir(full):
 		return f"folder is not empty: {path}"
 	os.rmdir(full)
@@ -612,25 +612,27 @@ def run_command(command):
 	return _execute(command, shell=True)
 
 
-def run_tool(name, arguments):
+def run_tool(name, arguments, tools):
 	try:
+		if name not in tools:
+			return f"tool not enabled: {name}"
 		args = json.loads(arguments) if isinstance(arguments, str) else arguments
-		if name == "read":
-			return read(args["path"])
-		if name == "write":
-			return write(args["path"], args["content"])
-		if name == "edit":
-			return edit(args["path"], args["old"], args["new"])
-		if name == "append":
-			return append(args["path"], args["content"])
-		if name == "rename":
-			return rename(args["path"], args["new_path"])
-		if name == "copy":
-			return copy(args["path"], args["new_path"])
-		if name == "fetch":
-			return fetch(args["url"], args.get("path"))
-		if name == "delete":
-			return delete(args["path"])
+		if name == "read_file":
+			return read_file(args["path"])
+		if name == "write_file":
+			return write_file(args["path"], args["content"])
+		if name == "edit_file":
+			return edit_file(args["path"], args["old"], args["new"])
+		if name == "append_file":
+			return append_file(args["path"], args["content"])
+		if name == "rename_file":
+			return rename_file(args["path"], args["new_path"])
+		if name == "copy_file":
+			return copy_file(args["path"], args["new_path"])
+		if name == "fetch_url":
+			return fetch_url(args["url"], args.get("path"))
+		if name == "delete_file":
+			return delete_file(args["path"])
 		if name == "current_time":
 			return current_time()
 		if name == "calculator":
@@ -641,10 +643,10 @@ def run_tool(name, arguments):
 			return run_python(args["code"])
 		if name == "run_command":
 			return run_command(args["command"])
-		if name == "mkdir":
-			return mkdir(args["path"])
-		if name == "rmdir":
-			return rmdir(args["path"])
+		if name == "make_folder":
+			return make_folder(args["path"])
+		if name == "remove_folder":
+			return remove_folder(args["path"])
 		return f"unknown tool: {name}"
 	except Exception as e:
 		return f"error: {type(e).__name__}: {e}"
@@ -655,23 +657,23 @@ def tool_summary(name, arguments):
 		args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
 	except Exception:
 		args = {}
-	if name == "read":
+	if name == "read_file":
 		return f"Read {args.get('path', '?')}"
-	if name == "write":
+	if name == "write_file":
 		return f"Wrote {args.get('path', '?')}"
-	if name == "edit":
+	if name == "edit_file":
 		return f"Edited {args.get('path', '?')}"
-	if name == "append":
+	if name == "append_file":
 		return f"Appended to {args.get('path', '?')}"
-	if name == "rename":
+	if name == "rename_file":
 		return f"Renamed {args.get('path', '?')} to {args.get('new_path', '?')}"
-	if name == "copy":
+	if name == "copy_file":
 		return f"Copied {args.get('path', '?')} to {args.get('new_path', '?')}"
-	if name == "fetch":
+	if name == "fetch_url":
 		if args.get("path"):
 			return f"Downloaded {args.get('url', '?')} to {args['path']}"
 		return f"Fetched {args.get('url', '?')}"
-	if name == "delete":
+	if name == "delete_file":
 		return f"Deleted {args.get('path', '?')}"
 	if name == "current_time":
 		return "Checked the current time"
@@ -686,9 +688,9 @@ def tool_summary(name, arguments):
 	if name == "run_command":
 		command = (args.get("command") or "").strip()
 		return f"Ran: {command[:40]}"
-	if name == "mkdir":
+	if name == "make_folder":
 		return f"Created folder {args.get('path', '?')}"
-	if name == "rmdir":
+	if name == "remove_folder":
 		return f"Removed folder {args.get('path', '?')}"
 	return name
 
@@ -760,9 +762,11 @@ def next_name(last_name):
 	return f"{uuid7.create(dt)}.json"
 
 
-def session_message(prompt, model, reasoning=True, session=None):
+def session_message(prompt, model, reasoning=True, session=None, tools=None):
 	if session is None:
 		session = str(uuid7.create(datetime.now(timezone.utc)))
+
+	active_tools = [t for t in TOOLS if t["function"]["name"] in tools] if tools is not None else []
 
 	existing = read_session_messages(session)
 
@@ -775,7 +779,7 @@ def session_message(prompt, model, reasoning=True, session=None):
 
 	add({"type": "prompt", "content": prompt, "model": model})
 	for step in range(MAX_STEPS):
-		result = OpenRouter.message(build_messages(existing), model, reasoning, TOOLS)
+		result = OpenRouter.message(build_messages(existing), model, reasoning, active_tools)
 		if "error" in result:
 			add({"type": "error", "error": result["error"], "model": model})
 			return {"session": session}
@@ -784,9 +788,14 @@ def session_message(prompt, model, reasoning=True, session=None):
 			add({"type": "reasoning", "content": message["reasoning"]})
 		calls = message.get("tool_calls")
 		if calls:
+			for call in calls:
+				try:
+					json.loads(call["function"]["arguments"])
+				except Exception:
+					call["function"]["arguments"] = "{}"
 			add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
 			for call in calls:
-				output = run_tool(call["function"]["name"], call["function"]["arguments"])
+				output = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
 				add({"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output})
 			continue
 		if not message.get("content"):

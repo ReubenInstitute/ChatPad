@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary
+from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary, TOOLS
 import re
 from rotate_keys import rotate
 
@@ -65,6 +65,10 @@ def format_time_filter(ts):
 
 app.jinja_env.globals['tool_summary'] = tool_summary
 
+@app.context_processor
+def inject_globals():
+	return {"TOOLS": TOOLS, "MODELS": OpenRouter.models()}
+
 @app.template_filter('markdown')
 def markdown_filter(text):
 	if text is None:
@@ -107,8 +111,7 @@ def show_models():
 @app.route('/')
 def index():
 	sessions = list_sessions()
-	model_list = OpenRouter.models()
-	return render_template('index.html', sessions=sessions, models=model_list)
+	return render_template('index.html', sessions=sessions)
 
 @app.route('/archive')
 def archive():
@@ -130,7 +133,6 @@ def view_session(session_id):
 	return render_template('session.html',
 						   session_id=session_id,
 						   turns=group_turns(messages),
-						   models=model_list,
 						   default_model=default_model,
 						   icons=model_icons())
 
@@ -162,8 +164,9 @@ def api_message(session_id=None):
 	prompt = request.form.get('prompt')
 	model = request.form.get('model', 'stealth/ox-alpha')
 	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
 	session = session_id or request.form.get('session')
-	response = session_message(prompt, model, reasoning, session)
+	response = session_message(prompt, model, reasoning, session, tools)
 	return redirect(f'/session/{response["session"]}')
 
 @app.route('/rotate-keys', methods=['POST'])

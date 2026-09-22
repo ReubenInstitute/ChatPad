@@ -11,6 +11,8 @@
 	--reasoning-text: #6666cc;
 	--prompt-text: #b8960f;
 	--time-text: #2e8b40;
+	--tool-off-text: #222222;
+	--tool-on-text: #2e8b40;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +29,8 @@
 		--reasoning-text: #7ba8d4;
 		--prompt-text: #e5c34a;
 		--time-text: #6fcf7a;
+		--tool-off-text: #e0e0e0;
+		--tool-on-text: #6fcf7a;
 	}
 }
 
@@ -132,7 +136,7 @@ nav {
 	}
 
 .chatbox-clearance {
-	margin-bottom: 140px;
+	margin-bottom: 340px;
 	}
 
 .chatbox-bar {
@@ -208,6 +212,25 @@ button {
 .chatbox .opt-reasoning, .chatbox .opt-model {
 	font-size: 0.8rem;
 	color: #999999;
+	}
+
+.chatbox .opt-tools {
+	grid-column: 1 / 4;
+	grid-row: 3;
+	max-height: 200px;
+	overflow-y: auto;
+	}
+
+.tool-toggle {
+	font-size: 0.85rem;
+	padding: 2px 0;
+	color: var(--tool-off-text);
+	cursor: pointer;
+	user-select: none;
+	}
+
+.tool-toggle.enabled {
+	color: var(--tool-on-text);
 	}
 
 .chatbox select {
