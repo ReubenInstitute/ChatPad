@@ -208,3 +208,7 @@ th {
 	background: var(--table-th-bg);
 	color: var(--table-th-text);
 }
+
+td.cap {
+	text-align: center;
+}

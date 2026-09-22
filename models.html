@@ -2,14 +2,20 @@
 
 {% block title %}Models{% endblock %}
 
-{% block content %}
-	<h1>Available Models</h1>
+{% macro models_table(models) %}
 	<table>
 		<thead>
 			<tr>
 				<th>Name</th>
 				<th>Description</th>
 				<th>Context Length</th>
+				<th>Tools</th>
+				<th>Vision</th>
+				<th>Audio</th>
+				<th>File</th>
+				<th>Reasoning</th>
+				<th>JSON</th>
+				<th>Web search</th>
 				<th>Pricing</th>
 				<th>Overrides</th>
 				<th>Overridden Pricing</th>
@@ -21,6 +27,17 @@
 				<td>{{ model.name }}</td>
 				<td>{{ model.description }}</td>
 				<td>{{ model.context_length|format_number }}</td>
+
+				<!-- Capabilities -->
+				{% set params = model.supported_parameters or [] %}
+				{% set inputs = model.input_modalities or [] %}
+				<td class="cap">{{ '✓' if 'tools' in params }}</td>
+				<td class="cap">{{ '✓' if 'image' in inputs }}</td>
+				<td class="cap">{{ '✓' if 'audio' in inputs }}</td>
+				<td class="cap">{{ '✓' if 'file' in inputs }}</td>
+				<td class="cap">{{ '✓' if 'reasoning' in params }}</td>
+				<td class="cap">{{ '✓' if 'structured_outputs' in params }}</td>
+				<td class="cap">{{ '✓' if 'web_search_options' in params }}</td>
 
 				<!-- Base pricing -->
 				<td>
@@ -52,4 +69,12 @@
 		{% endfor %}
 		</tbody>
 	</table>
+{% endmacro %}
+
+{% block content %}
+	<h1>Free Models ({{ free|length }})</h1>
+	{{ models_table(free) }}
+
+	<h1>Other Models ({{ other|length }})</h1>
+	{{ models_table(other) }}
 {% endblock %}

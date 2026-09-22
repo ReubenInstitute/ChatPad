@@ -65,6 +65,8 @@ class OpenRouter:
 				"description": model.get("description"),
 				"context_length": model.get("context_length"),
 				"supported_parameters": model.get("supported_parameters"),
+				"input_modalities": model.get("architecture", {}).get("input_modalities"),
+				"output_modalities": model.get("architecture", {}).get("output_modalities"),
 				"pricing": base_pricing,
 				"overrides": overrides_conditions,
 				"overridden_pricing": overridden_pricing

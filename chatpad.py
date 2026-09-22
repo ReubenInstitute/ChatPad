@@ -81,8 +81,10 @@ def raw_view(session_id):
 
 @app.route('/models')
 def show_models():
-	models = OpenRouter.models()
-	return render_template('models.html', models=models)
+	models = OpenRouter.models(free=False)
+	free = [m for m in models if m["id"].endswith(":free")]
+	other = [m for m in models if not m["id"].endswith(":free")]
+	return render_template('models.html', free=free, other=other)
 
 @app.route('/')
 def index():
