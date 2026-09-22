@@ -7,6 +7,10 @@ import uuid7
 import json
 import tarfile
 import shutil
+import signal
+import subprocess
+import sys
+import tempfile
 import ast
 import math
 import operator
@@ -18,7 +22,8 @@ import io
 
 from openrouter import OpenRouter
 
-SESSIONS_FOLDER = "sessions"
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
 SESSION_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
 MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
 
@@ -229,11 +234,13 @@ def list_sessions():
 	sessions.sort(key=lambda x: x[1], reverse=True)
 	return sessions
 
-MAX_STEPS = 5
+MAX_STEPS = 10
 
-SYSTEM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "system")
+# started in the app folder: the workspace is its system/ folder; started anywhere else: that folder is the workspace
+SYSTEM_DIR = os.path.join(APP_DIR, "system") if os.path.realpath(os.getcwd()) == os.path.realpath(APP_DIR) else os.getcwd()
 MAX_READ = 100000
 MAX_SAVE = 10 * 1024 * 1024
+COMMAND_TIMEOUT = 30
 
 def _tool(name, description, properties, required=None):
 	return {
@@ -257,6 +264,8 @@ TOOLS = [
 	_tool("current_time", "Get the current date and time on the server.", {}),
 	_tool("calculator", "Evaluate an arithmetic expression exactly. Supports + - * / // % **, parentheses, pi, e, and sqrt sin cos tan log log10 exp floor ceil abs round min max.", {"expression": {"type": "string"}}),
 	_tool("todo", "Keep a todo list (stored in todo.md in the workspace). Actions: add (item is the text), done (item is the number), remove (item is the number), list. Returns the updated list.", {"action": {"type": "string", "enum": ["add", "done", "remove", "list"]}, "item": {"type": "string"}}, required=["action"]),
+	_tool("run_python", "Run Python 3 code in the workspace folder and return what it prints, including errors. Each call is a fresh process, so print anything you want to see.", {"code": {"type": "string"}}),
+	_tool("run_command", "Run a shell command in the workspace folder and return its output, including errors. Each call is a fresh shell, so cd does not carry over; pipes and && work.", {"command": {"type": "string"}}),
 	_tool("mkdir", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 	_tool("rmdir", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
 ]
@@ -553,6 +562,38 @@ def todo(action, item=None):
 	return _todo_show(items)
 
 
+def _execute(command, shell=False):
+	os.makedirs(SYSTEM_DIR, exist_ok=True)
+	process = subprocess.Popen(command, shell=shell, cwd=SYSTEM_DIR, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+	try:
+		stdout, stderr = process.communicate(timeout=COMMAND_TIMEOUT)
+	except subprocess.TimeoutExpired:
+		os.killpg(process.pid, signal.SIGKILL)
+		process.communicate()
+		return f"timed out after {COMMAND_TIMEOUT} seconds"
+	output = stdout
+	if stderr:
+		output += ("\n" if output else "") + "[stderr]\n" + stderr
+	if process.returncode != 0:
+		output += f"\n[exit code {process.returncode}]"
+	if len(output) > MAX_READ:
+		output = output[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
+	return output or "(no output)"
+
+
+def run_python(code):
+	with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+		f.write(code)
+	try:
+		return _execute([sys.executable, f.name])
+	finally:
+		os.remove(f.name)
+
+
+def run_command(command):
+	return _execute(command, shell=True)
+
+
 def run_tool(name, arguments):
 	try:
 		args = json.loads(arguments) if isinstance(arguments, str) else arguments
@@ -578,6 +619,10 @@ def run_tool(name, arguments):
 			return calculator(args["expression"])
 		if name == "todo":
 			return todo(args["action"], args.get("item"))
+		if name == "run_python":
+			return run_python(args["code"])
+		if name == "run_command":
+			return run_command(args["command"])
 		if name == "mkdir":
 			return mkdir(args["path"])
 		if name == "rmdir":
