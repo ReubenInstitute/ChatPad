@@ -24,6 +24,7 @@ from openrouter import OpenRouter
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
+ARCHIVE_FOLDER = os.path.join(APP_DIR, "archive")
 SESSION_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
 MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
 
@@ -180,16 +181,32 @@ def uuid7_timestamp(uuid_str):
 	return dt.strftime("%Y%m%d%H%M%S") + f"{ms:03d}"
 
 
-def session_archive_path(session_id):
-	return os.path.join(SESSIONS_FOLDER, f"{session_id}.tar.bz2")
+def _session_path(session_id, archived):
+	folder = ARCHIVE_FOLDER if archived else SESSIONS_FOLDER
+	return os.path.join(folder, f"{session_id}.tar.bz2")
+
+
+def archive_session(session_id):
+	os.makedirs(ARCHIVE_FOLDER, exist_ok=True)
+	src = _session_path(session_id, False)
+	if os.path.isfile(src):
+		os.replace(src, _session_path(session_id, True))
+
+
+def unarchive_session(session_id):
+	src = _session_path(session_id, True)
+	if os.path.isfile(src):
+		os.replace(src, _session_path(session_id, False))
 
 
 def read_session_messages(session_id):
-	archive_path = session_archive_path(session_id)
-	if not os.path.isfile(archive_path):
+	path = _session_path(session_id, False)
+	if not os.path.isfile(path):
+		path = _session_path(session_id, True)
+	if not os.path.isfile(path):
 		return []
 	messages = []
-	with tarfile.open(archive_path, "r:bz2") as tar:
+	with tarfile.open(path, "r:bz2") as tar:
 		names = [n for n in tar.getnames() if MESSAGE_PATTERN.match(n)]
 		names.sort()
 		for name in names:
@@ -200,7 +217,7 @@ def read_session_messages(session_id):
 
 def write_session_messages(session_id, messages):
 	os.makedirs(SESSIONS_FOLDER, exist_ok=True)
-	archive_path = session_archive_path(session_id)
+	archive_path = _session_path(session_id, False)
 	tmp_path = archive_path + ".tmp"
 	messages = sorted(messages, key=lambda m: m[0])
 	with tarfile.open(tmp_path, "w:bz2") as tar:
@@ -212,11 +229,12 @@ def write_session_messages(session_id, messages):
 	os.replace(tmp_path, archive_path)
 
 
-def list_sessions():
+def list_sessions(archived=False):
+	folder = ARCHIVE_FOLDER if archived else SESSIONS_FOLDER
 	sessions = []
-	if not os.path.isdir(SESSIONS_FOLDER):
+	if not os.path.isdir(folder):
 		return sessions
-	for name in os.listdir(SESSIONS_FOLDER):
+	for name in os.listdir(folder):
 		if not name.endswith(".tar.bz2"):
 			continue
 		session_id = name[:-len(".tar.bz2")]
@@ -234,7 +252,7 @@ def list_sessions():
 	sessions.sort(key=lambda x: x[1], reverse=True)
 	return sessions
 
-MAX_STEPS = 10
+MAX_STEPS = 20
 
 # started in the app folder: the workspace is its system/ folder; started anywhere else: that folder is the workspace
 SYSTEM_DIR = os.path.join(APP_DIR, "system") if os.path.realpath(os.getcwd()) == os.path.realpath(APP_DIR) else os.getcwd()

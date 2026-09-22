@@ -5,6 +5,16 @@
 {% block content %}
 	<h1>Session: {{ session_id }}</h1>
 
+	{% if request.path.startswith('/archive/') %}
+	<form action="/session/{{ session_id }}/unarchive" method="post">
+		<button type="submit">Unarchive</button>
+	</form>
+	{% else %}
+	<form action="/session/{{ session_id }}/archive" method="post">
+		<button type="submit">Archive</button>
+	</form>
+	{% endif %}
+
 	<div class="messages">
 	{% for turn in turns %}
 		<div class="message">
@@ -105,6 +115,7 @@
 	{% endfor %}
 	</div>
 
+	{% if not request.path.startswith('/archive/') %}
 	<hr>
 
 	<div class="chatbox">
@@ -129,6 +140,7 @@
 		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
 	</form>
 	</div>
+	{% endif %}
 
 
 <script>

@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, group_turns
+from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session
 import re
 from rotate_keys import rotate
 
@@ -92,7 +92,13 @@ def index():
 	model_list = OpenRouter.models()
 	return render_template('index.html', sessions=sessions, models=model_list)
 
+@app.route('/archive')
+def archive():
+	sessions = list_sessions(archived=True)
+	return render_template('archive.html', sessions=sessions)
+
 @app.route('/session/<session_id>')
+@app.route('/archive/<session_id>')
 def view_session(session_id):
 	messages = get_session(session_id)
 	model_list = OpenRouter.models()
@@ -108,6 +114,16 @@ def view_session(session_id):
 						   turns=group_turns(messages),
 						   models=model_list,
 						   default_model=default_model)
+
+@app.route('/session/<session_id>/archive', methods=['POST'])
+def archive_session_route(session_id):
+	archive_session(session_id)
+	return redirect(f'/archive/{session_id}')
+
+@app.route('/session/<session_id>/unarchive', methods=['POST'])
+def unarchive_session_route(session_id):
+	unarchive_session(session_id)
+	return redirect(f'/session/{session_id}')
 
 @app.route('/api/models')
 def api_models():
@@ -155,4 +171,6 @@ def serve_file(filename):
 
 
 if __name__ == "__main__":
+	if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+		OpenRouter.load_models()
 	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)

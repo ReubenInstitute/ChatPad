@@ -8,27 +8,32 @@ def api_key():
 	with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
 		return f.read().strip()
 
+_cache = None
+
 class OpenRouter:
 	timeout = 120
 	free_only = True
 	#free_only = False
 
 	@staticmethod
-	def models(free=True):
+	def load_models():
+		print("\033[94mhttps://openrouter.ai/api/v1/models\033[0m", flush=True)
+		global _cache
 		headers = {"Authorization": f"Bearer {api_key()}"}
-		try:
-			response = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
-			data = response.json()
-			all_models = data["data"]
-		except Exception:
+		response = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
+		_cache = response.json()["data"]
+
+
+
+	@staticmethod
+	def models(free=True):
+		if _cache is None:
 			return []
-		with open("models.json", "w") as f:
-			json.dump(data, f, indent=2)
 		result = []
 
 		CONDITION_KEYS = {'utc_days', 'utc_start', 'utc_end', 'min_prompt_tokens'}
 
-		for model in all_models:
+		for model in _cache:
 			if OpenRouter.free_only and free:
 				if not model.get("id", "").endswith(":free"):
 					continue
@@ -74,11 +79,9 @@ class OpenRouter:
 
 		return result
 
-
-
-
 	@staticmethod
 	def message(messages, model=None, think=False, tools=None):
+		print("\033[94mhttps://openrouter.ai/api/v1/chat/completions\033[0m", flush=True)
 		if model is None:
 			available = OpenRouter.models()
 			model = random.choice(available)["id"]
