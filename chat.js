@@ -151,7 +151,7 @@ function toggleSystemModelList() {
 function selectSystemModel(el) {
 	document.querySelectorAll('#system-model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
-	document.getElementById('system-model-header').textContent = el.dataset.id;
+	document.getElementById('system-model-header').textContent = el.dataset.id || 'none';
 	document.getElementById('system-model-header').classList.remove('hidden');
 	document.getElementById('system-model-list').classList.add('collapsed');
 	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
