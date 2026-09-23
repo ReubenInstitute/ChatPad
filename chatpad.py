@@ -137,15 +137,20 @@ def view_session(session_id):
 						   default_model=default_model,
 						   icons=model_icons())
 
-@app.route('/session/<session_id>/archive', methods=['POST'])
+@app.route('/api/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):
 	archive_session(session_id)
 	return redirect(f'/archive/{session_id}')
 
-@app.route('/session/<session_id>/unarchive', methods=['POST'])
+@app.route('/api/<session_id>/unarchive', methods=['POST'])
 def unarchive_session_route(session_id):
 	unarchive_session(session_id)
 	return redirect(f'/session/{session_id}')
+
+@app.route('/api/markdown', methods=['POST'])
+def api_markdown():
+	text = request.form.get('text', '')
+	return markdown_filter(text)
 
 @app.route('/api/models')
 def api_models():

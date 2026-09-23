@@ -95,11 +95,11 @@
 	</div>
 
 	{% if request.path.startswith('/archive/') %}
-	<form action="/session/{{ session_id }}/unarchive" method="post">
+	<form action="/api/{{ session_id }}/unarchive" method="post">
 		<button type="submit">Unarchive</button>
 	</form>
 	{% else %}
-	<form class="chatbox-clearance" action="/session/{{ session_id }}/archive" method="post">
+	<form class="chatbox-clearance" action="/api/{{ session_id }}/archive" method="post">
 		<button type="submit">Archive</button>
 	</form>
 	{% endif %}
