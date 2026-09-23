@@ -8,36 +8,43 @@ def api_key():
 	with open(os.path.join(os.path.dirname(__file__), "key.txt"), "r") as f:
 		return f.read().strip()
 
-_cache = None
+
+class Model:
+	def __init__(self, provider, id, **fields):
+		self.provider = provider
+		self.id = id
+		self.__dict__.update(fields)
+
+	@property
+	def is_free(self):
+		return self.id.endswith(":free")
+
+	def message(self, messages, think, tools):
+		real_id = self.id.split('/', 1)[1]
+		return self.provider.message(messages, real_id, think, tools)
+
 
 class OpenRouter:
 	timeout = 120
-	free_only = True
-	#free_only = False
 
-	@staticmethod
-	def load_models():
+	def __init__(self):
+		self._cache = None
+
+	def load_models(self):
 		print("\033[94mhttps://openrouter.ai/api/v1/models\033[0m", flush=True)
-		global _cache
 		headers = {"Authorization": f"Bearer {api_key()}"}
 		response = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
-		_cache = response.json()["data"]
+		self._cache = response.json()["data"]
 
-
-
-	@staticmethod
-	def models(free=True):
-		if _cache is None:
+	@property
+	def models(self):
+		if self._cache is None:
 			return []
 		result = []
 
 		CONDITION_KEYS = {'utc_days', 'utc_start', 'utc_end', 'min_prompt_tokens'}
 
-		for model in _cache:
-			if OpenRouter.free_only and free:
-				if not model.get("id", "").endswith(":free"):
-					continue
-
+		for model in self._cache:
 			raw_pricing = model.get("pricing", {})
 
 			# Base pricing: all keys except 'overrides'
@@ -64,28 +71,29 @@ class OpenRouter:
 				overrides_conditions.append(cond)
 				overridden_pricing.append(price_ov)
 
-			result.append({
-				"id": model.get("id"),
-				"name": model.get("name"),
-				"description": model.get("description"),
-				"context_length": model.get("context_length"),
-				"supported_parameters": model.get("supported_parameters"),
-				"input_modalities": model.get("architecture", {}).get("input_modalities"),
-				"output_modalities": model.get("architecture", {}).get("output_modalities"),
-				"pricing": base_pricing,
-				"overrides": overrides_conditions,
-				"overridden_pricing": overridden_pricing
-			})
+			result.append(Model(self, f"openrouter/{model.get('id')}",
+				name=model.get("name"),
+				description=model.get("description"),
+				context_length=model.get("context_length"),
+				supported_parameters=model.get("supported_parameters"),
+				input_modalities=model.get("architecture", {}).get("input_modalities"),
+				output_modalities=model.get("architecture", {}).get("output_modalities"),
+				pricing=base_pricing,
+				overrides=overrides_conditions,
+				overridden_pricing=overridden_pricing,
+			))
 
-		result.sort(key=lambda m: m["id"])
+		result.sort(key=lambda m: m.id)
 		return result
 
-	@staticmethod
-	def message(messages, model=None, think=False, tools=None):
+	@property
+	def free_models(self):
+		return [m for m in self.models if m.is_free]
+
+	def message(self, messages, model=None, think=False, tools=None):
 		print("\033[94mhttps://openrouter.ai/api/v1/chat/completions\033[0m", flush=True)
 		if model is None:
-			available = OpenRouter.models()
-			model = random.choice(available)["id"]
+			model = random.choice(self.models).id.split('/', 1)[1]
 		url = "https://openrouter.ai/api/v1/chat/completions"
 		headers = {
 			"Authorization": f"Bearer {api_key()}",

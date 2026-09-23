@@ -3,12 +3,12 @@ import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
 import markdown
-from openrouter import OpenRouter
-from chat import session_message, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS
+from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS
 import re
 from rotate_keys import rotate
 
 app = Flask(__name__, template_folder='.', static_folder='.')
+chat = Chat()
 
 BASE_DIR = "/sdcard"
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -89,7 +89,7 @@ app.jinja_env.globals['find_tool_result'] = find_tool_result
 
 @app.context_processor
 def inject_globals():
-	return {"TOOLS": TOOLS, "MODELS": OpenRouter.models()}
+	return {"TOOLS": TOOLS, "MODELS": chat.free_models}
 
 @app.template_filter('markdown')
 def markdown_filter(text):
@@ -124,11 +124,8 @@ def model_icons():
 	return icons
 
 @app.route('/models')
-def show_models():
-	models = OpenRouter.models(free=False)
-	free = [m for m in models if m["id"].endswith(":free")]
-	other = [m for m in models if not m["id"].endswith(":free")]
-	return render_template('models.html', free=free, other=other, icons=model_icons())
+def models_view():
+	return render_template('models.html', models=chat.models, icons=model_icons())
 
 @app.route('/')
 def index():
@@ -149,12 +146,12 @@ def view_session_redirect(session_id):
 def chat_view(session_id=None):
 	sessions = group_sessions_by_day(list_sessions()) if session_id is None else None
 	messages = get_session(session_id) if session_id else []
-	model_list = OpenRouter.models()
+	model_list = chat.free_models
 	default_model = next((m["model"] for m in reversed(messages) if m.get("model")), None)
 	if default_model:
 		pass
 	elif model_list:
-		default_model = model_list[0]["id"]
+		default_model = model_list[0].id
 	else:
 		default_model = None
 	return render_template('chat.html',
@@ -182,7 +179,12 @@ def api_markdown():
 
 @app.route('/api/models')
 def api_models():
-	return jsonify(OpenRouter.models())
+	result = []
+	for m in chat.free_models:
+		fields = dict(vars(m))
+		fields.pop("provider", None)
+		result.append(fields)
+	return jsonify(result)
 
 @app.route('/api/sessions')
 def api_sessions():
@@ -196,11 +198,11 @@ def api_get_session(session_id):
 @app.route('/api/<session_id>/message', methods=['POST'])
 def api_message(session_id=None):
 	prompt = request.form.get('prompt')
-	model = request.form.get('model', 'stealth/ox-alpha')
+	model = request.form.get('model')
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	session = session_id or request.form.get('session')
-	for record in session_message(prompt, model, reasoning, session, tools):
+	for record in chat.session_message(prompt, model, reasoning, session, tools):
 		session = record["session"]
 	return redirect(f'/chat/{session}')
 
@@ -208,12 +210,12 @@ def api_message(session_id=None):
 @app.route('/api/<session_id>/blocks', methods=['POST'])
 def api_blocks(session_id=None):
 	prompt = request.form.get('prompt')
-	model = request.form.get('model', 'stealth/ox-alpha')
+	model = request.form.get('model')
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	session = session_id or request.form.get('session')
 	def generate():
-		for record in session_message(prompt, model, reasoning, session, tools):
+		for record in chat.session_message(prompt, model, reasoning, session, tools):
 			yield f"data: {json.dumps(record)}\n\n"
 	return Response(generate(), mimetype='text/event-stream')
 
@@ -242,5 +244,5 @@ def serve_file(filename):
 
 if __name__ == "__main__":
 	if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-		OpenRouter.load_models()
+		chat.openrouter.load_models()
 	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)

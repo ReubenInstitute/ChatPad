@@ -32,7 +32,7 @@
 				</div>
 				{% if resp %}
 				<div class="info">
-					{% set icon = icons.get(resp.model.split('/')[0].lstrip('~')) if resp.model else None %}
+					{% set icon = icons.get(resp.model.split('/')[1].lstrip('~')) if resp.model else None %}
 					{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}
 					<small>{{ resp.model }}</small>
 				</div>
@@ -123,7 +123,7 @@
 			<div class="opt-header" onclick="toggleSystemModelList()">Models</div>
 			<div class="model-toggle enabled" data-id="" onclick="selectSystemModel(this)">none</div>
 			{% for model in MODELS %}
-				{% set icon = icons.get(model.id.split('/')[0].lstrip('~')) %}
+				{% set icon = icons.get(model.id.split('/')[1].lstrip('~')) %}
 				<div class="model-toggle" data-id="{{ model.id }}" onclick="selectSystemModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.id }}</div>
 			{% endfor %}
 		</div>
@@ -146,7 +146,7 @@
 
 		<div class="model-list collapsed" id="model-list">
 			{% for model in MODELS %}
-				{% set icon = icons.get(model.id.split('/')[0].lstrip('~')) %}
+				{% set icon = icons.get(model.id.split('/')[1].lstrip('~')) %}
 				<div class="model-toggle {% if model.id == (default_model or MODELS[0].id) %}enabled{% endif %}" data-id="{{ model.id }}" onclick="selectModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.id }}</div>
 			{% endfor %}
 		</div>

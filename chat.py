@@ -29,6 +29,9 @@ SESSION_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}
 MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
 
 class Chat:
+	def __init__(self):
+		self.openrouter = OpenRouter()
+
 	@property
 	def sessions(self):
 		if not os.path.exists(SESSIONS_FOLDER):
@@ -40,6 +43,71 @@ class Chat:
 			session = Session(uuid=folder)
 			sessions.append(session)
 		return sessions
+
+	@property
+	def models(self):
+		return self.openrouter.models
+
+	@property
+	def free_models(self):
+		return self.openrouter.free_models
+
+	def resolve_model(self, model_id):
+		for m in self.models:
+			if m.id == model_id:
+				return m
+		raise ValueError(f"unknown model: {model_id}")
+
+	def session_message(self, prompt, model, reasoning=True, session=None, tools=None):
+		if session is None:
+			session = str(uuid7.create(datetime.now(timezone.utc)))
+
+		active_tools = [t for t in TOOLS if t["function"]["name"] in tools] if tools is not None else []
+
+		model = self.resolve_model(model)
+
+		existing = read_session_messages(session)
+
+		def add(record):
+			name = next_name(existing[-1][0] if existing else None)
+			record["session"] = session
+			record["uuid"] = name[:-5]
+			existing.append((name, record))
+			write_session_messages(session, existing)
+			return record
+
+		yield add({"type": "prompt", "content": prompt, "model": model.id})
+		for step in range(MAX_STEPS):
+			result = model.message(build_messages(existing), reasoning, active_tools)
+			if "error" in result:
+				yield add({"type": "error", "error": result["error"], "model": model.id})
+				return
+			message = result["choices"][0]["message"]
+			if message.get("reasoning"):
+				yield add({"type": "reasoning", "content": message["reasoning"]})
+			calls = message.get("tool_calls")
+			if calls:
+				for call in calls:
+					try:
+						json.loads(call["function"]["arguments"])
+					except Exception:
+						call["function"]["arguments"] = "{}"
+				yield add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
+				for call in calls:
+					output, error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
+					record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
+					if error:
+						record["error"] = {"message": error}
+					yield add(record)
+				continue
+			if not message.get("content"):
+				reason = result["choices"][0].get("finish_reason")
+				yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model.id})
+				return
+			cost = (result.get("usage") or {}).get("cost")
+			yield add({"type": "response", "content": message.get("content"), "model": model.id, "cost": cost})
+			return
+		yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model.id})
 
 class Session:
 	def __init__(self, uuid=None):
@@ -799,56 +867,6 @@ def next_name(last_name):
 		if dt < last + timedelta(milliseconds=1):
 			dt = last + timedelta(milliseconds=1)
 	return f"{uuid7.create(dt)}.json"
-
-
-def session_message(prompt, model, reasoning=True, session=None, tools=None):
-	if session is None:
-		session = str(uuid7.create(datetime.now(timezone.utc)))
-
-	active_tools = [t for t in TOOLS if t["function"]["name"] in tools] if tools is not None else []
-
-	existing = read_session_messages(session)
-
-	def add(record):
-		name = next_name(existing[-1][0] if existing else None)
-		record["session"] = session
-		record["uuid"] = name[:-5]
-		existing.append((name, record))
-		write_session_messages(session, existing)
-		return record
-
-	yield add({"type": "prompt", "content": prompt, "model": model})
-	for step in range(MAX_STEPS):
-		result = OpenRouter.message(build_messages(existing), model, reasoning, active_tools)
-		if "error" in result:
-			yield add({"type": "error", "error": result["error"], "model": model})
-			return
-		message = result["choices"][0]["message"]
-		if message.get("reasoning"):
-			yield add({"type": "reasoning", "content": message["reasoning"]})
-		calls = message.get("tool_calls")
-		if calls:
-			for call in calls:
-				try:
-					json.loads(call["function"]["arguments"])
-				except Exception:
-					call["function"]["arguments"] = "{}"
-			yield add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
-			for call in calls:
-				output, error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
-				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
-				if error:
-					record["error"] = {"message": error}
-				yield add(record)
-			continue
-		if not message.get("content"):
-			reason = result["choices"][0].get("finish_reason")
-			yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model})
-			return
-		cost = (result.get("usage") or {}).get("cost")
-		yield add({"type": "response", "content": message.get("content"), "model": model, "cost": cost})
-		return
-	yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model})
 
 
 
