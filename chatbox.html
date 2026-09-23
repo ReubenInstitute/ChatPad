@@ -11,7 +11,7 @@
 	</div>
 
 	<div class="chatbox chatbox-fixed">
-	<form action="{% if session_id %}/api/message/{{ session_id }}{% else %}/api/message{% endif %}" method="post">
+	<form action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
 		<div class="opt-reasoning">
 			<div class="tool-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)">Think</div>
 			<input type="hidden" name="reasoning" value="1">

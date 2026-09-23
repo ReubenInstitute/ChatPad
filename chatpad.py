@@ -160,12 +160,12 @@ def api_models():
 def api_sessions():
 	return jsonify(list_sessions())
 
-@app.route('/api/sessions/<session_id>')
+@app.route('/api/<session_id>')
 def api_get_session(session_id):
 	return jsonify(get_session(session_id))
 
 @app.route('/api/message', methods=['POST'])
-@app.route('/api/message/<session_id>', methods=['POST'])
+@app.route('/api/<session_id>/message', methods=['POST'])
 def api_message(session_id=None):
 	prompt = request.form.get('prompt')
 	model = request.form.get('model', 'stealth/ox-alpha')
