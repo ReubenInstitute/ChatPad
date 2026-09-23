@@ -114,6 +114,7 @@ nav {
 	color: var(--error-text);
 	padding: 5px 10px;
 	border-radius: 4px;
+	font-size: 0.75rem;
 }
 
 .prompt, .reasoning, .tool, .error, .response {

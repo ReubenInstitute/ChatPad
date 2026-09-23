@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary, TOOLS
+from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary, find_tool_result, TOOLS
 import re
 from rotate_keys import rotate
 
@@ -64,6 +64,7 @@ def format_time_filter(ts):
 		return ts
 
 app.jinja_env.globals['tool_summary'] = tool_summary
+app.jinja_env.globals['find_tool_result'] = find_tool_result
 
 @app.context_processor
 def inject_globals():

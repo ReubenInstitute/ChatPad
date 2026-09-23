@@ -43,37 +43,31 @@
 					</div>
 				</div>
 			{% elif msg.type == "tool_call" %}
-				<div class="tool" onclick="toggleMessage(this)">
+				{% for call in msg.tool_calls %}
+				{% set result = find_tool_result(turn, call.id) %}
+				<div class="tool{{ ' error' if result and result.error else '' }}" onclick="toggleMessage(this)">
 					<div>
 						<div class="content">
-							{% for call in msg.tool_calls %}
 							<div class="tool-summary">{{ tool_summary(call.function.name, call.function.arguments) }}</div>
 							<div class="tool-raw">{{ call.function.name }}({{ call.function.arguments }})</div>
-							{% endfor %}
+							{% if result %}
+								<div class="tool-raw">{{ result.content }}</div>
+							{% endif %}
 						</div>
 					</div>
 					<div style="display:none;">
-						<span>{{ tool_summary(msg.tool_calls[0].function.name, msg.tool_calls[0].function.arguments) }}</span>
+						<span>{{ tool_summary(call.function.name, call.function.arguments) }}</span>
 					</div>
 				</div>
-			{% elif msg.type == "tool_result" %}
-				<div class="tool" onclick="toggleMessage(this)">
-					<div>
-						<div class="content">
-							<div class="tool-summary">{{ msg.name }} result</div>
-							<div class="tool-raw">{{ msg.content }}</div>
-						</div>
-					</div>
-					<div style="display:none;">
-						<span>{{ msg.name }} result</span>
-					</div>
-				</div>
+				{% endfor %}
 			{% elif msg.type == "error" %}
 				<div class="error" onclick="toggleMessage(this)">
 					<div>
 						<div class="content">
 							<p>{{ msg.error.message }}</p>
-							<small>Code: {{ msg.error.code }}</small>
+							{% if msg.error.code %}
+								<small>Code: {{ msg.error.code }}</small>
+							{% endif %}
 							{% if msg.error.metadata %}
 								<p>{{ msg.error.metadata.raw }}</p>
 							{% endif %}

@@ -289,19 +289,23 @@ TOOLS = [
 ]
 
 
+class ToolError(Exception):
+	pass
+
+
 def _resolve(name):
 	# a relative path inside system/; no "..", no absolute paths, no symlinks
 	if name.strip("/") in ("", "."):
 		return SYSTEM_DIR
 	if "\\" in name or name.startswith("/"):
-		raise ValueError(f"invalid path: {name}")
+		raise ToolError(f"invalid path: {name}")
 	full = SYSTEM_DIR
 	for part in name.rstrip("/").split("/"):
 		if part in ("", ".", ".."):
-			raise ValueError(f"invalid path: {name}")
+			raise ToolError(f"invalid path: {name}")
 		full = os.path.join(full, part)
 		if os.path.islink(full):
-			raise ValueError(f"invalid path: {name}")
+			raise ToolError(f"invalid path: {name}")
 	return full
 
 
@@ -310,7 +314,7 @@ def read_file(path):
 	if not os.path.exists(full):
 		if full == SYSTEM_DIR:
 			return "(empty)"
-		return f"not found: {path}"
+		raise ToolError(f"not found: {path}")
 	if os.path.isdir(full):
 		lines = []
 		for n in sorted(os.listdir(full)):
@@ -330,10 +334,10 @@ def read_file(path):
 def write_file(path, content):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
-		return f"invalid name: {path}"
+		raise ToolError(f"invalid name: {path}")
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
 	if not os.path.isdir(os.path.dirname(full)):
-		return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
+		raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(content)
 	return f"wrote {len(content)} characters to {path}"
@@ -342,23 +346,23 @@ def write_file(path, content):
 def _existing_file(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
-		raise ValueError(f"invalid name: {path}")
+		raise ToolError(f"invalid name: {path}")
 	if not os.path.exists(full):
-		raise FileNotFoundError(f"not found: {path}")
+		raise ToolError(f"not found: {path}")
 	return full
 
 
 def edit_file(path, old, new):
 	full = _existing_file(path)
 	if not old:
-		return "old must not be empty"
+		raise ToolError("old must not be empty")
 	with open(full, "r", encoding="utf-8") as f:
 		text = f.read()
 	count = text.count(old)
 	if count == 0:
-		return f"text not found in {path}"
+		raise ToolError(f"text not found in {path}")
 	if count > 1:
-		return f"text found {count} times in {path}; add more surrounding text to make it unique"
+		raise ToolError(f"text found {count} times in {path}; add more surrounding text to make it unique")
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(text.replace(old, new))
 	return f"edited {path}"
@@ -367,10 +371,10 @@ def edit_file(path, old, new):
 def append_file(path, content):
 	full = _resolve(path)
 	if full == SYSTEM_DIR or os.path.isdir(full):
-		return f"invalid name: {path}"
+		raise ToolError(f"invalid name: {path}")
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
 	if not os.path.isdir(os.path.dirname(full)):
-		return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
+		raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
 	with open(full, "a", encoding="utf-8") as f:
 		f.write(content)
 	return f"appended {len(content)} characters to {path}"
@@ -380,11 +384,11 @@ def _move_or_copy(path, new_path, action):
 	source = _existing_file(path)
 	target = _resolve(new_path)
 	if target == SYSTEM_DIR or os.path.isdir(target):
-		return f"invalid name: {new_path}"
+		raise ToolError(f"invalid name: {new_path}")
 	if os.path.lexists(target):
-		return f"already exists: {new_path}"
+		raise ToolError(f"already exists: {new_path}")
 	if not os.path.isdir(os.path.dirname(target)):
-		return f"folder does not exist: {os.path.dirname(new_path)} (create it with make_folder)"
+		raise ToolError(f"folder does not exist: {os.path.dirname(new_path)} (create it with make_folder)")
 	if action == "rename":
 		os.rename(source, target)
 	else:
@@ -418,7 +422,7 @@ def _get(url):
 			url = urljoin(url, response.headers["Location"])
 			continue
 		return response
-	raise ValueError("too many redirects")
+	raise ToolError("too many redirects")
 
 
 def fetch_url(url, path=None):
@@ -426,13 +430,13 @@ def fetch_url(url, path=None):
 	if path:
 		target = _resolve(path)
 		if target == SYSTEM_DIR or os.path.isdir(target):
-			return f"invalid name: {path}"
+			raise ToolError(f"invalid name: {path}")
 		os.makedirs(SYSTEM_DIR, exist_ok=True)
 		if not os.path.isdir(os.path.dirname(target)):
-			return f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)"
+			raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
 	response = _get(url)
 	if response.status_code != 200:
-		return f"HTTP {response.status_code}"
+		raise ToolError(f"HTTP {response.status_code}")
 	limit = MAX_SAVE if target else MAX_READ * 4
 	data = b""
 	for chunk in response.iter_content(65536):
@@ -442,7 +446,7 @@ def fetch_url(url, path=None):
 	truncated = len(data) > limit
 	if target:
 		if truncated:
-			return f"too large: over {MAX_SAVE} bytes, not saved"
+			raise ToolError(f"too large: over {MAX_SAVE} bytes, not saved")
 		with open(target, "wb") as f:
 			f.write(data)
 		return f"saved {len(data)} bytes to {path}"
@@ -460,11 +464,11 @@ def fetch_url(url, path=None):
 def delete_file(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
-		return f"invalid name: {path}"
+		raise ToolError(f"invalid name: {path}")
 	if os.path.isdir(full):
-		return f"{path} is a folder, use remove_folder"
+		raise ToolError(f"{path} is a folder, use remove_folder")
 	if not os.path.exists(full):
-		return f"not found: {path}"
+		raise ToolError(f"not found: {path}")
 	os.remove(full)
 	return f"deleted {path}"
 
@@ -472,11 +476,11 @@ def delete_file(path):
 def make_folder(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
-		return f"invalid name: {path}"
+		raise ToolError(f"invalid name: {path}")
 	if os.path.isdir(full):
-		return f"already exists: {path}"
+		raise ToolError(f"already exists: {path}")
 	if os.path.exists(full):
-		return f"a file with that name exists: {path}"
+		raise ToolError(f"a file with that name exists: {path}")
 	os.makedirs(full)
 	return f"created folder {path}"
 
@@ -484,13 +488,13 @@ def make_folder(path):
 def remove_folder(path):
 	full = _resolve(path)
 	if full == SYSTEM_DIR:
-		return f"invalid name: {path}"
+		raise ToolError(f"invalid name: {path}")
 	if not os.path.exists(full):
-		return f"not found: {path}"
+		raise ToolError(f"not found: {path}")
 	if not os.path.isdir(full):
-		return f"{path} is a file, use delete_file"
+		raise ToolError(f"{path} is a file, use delete_file")
 	if os.listdir(full):
-		return f"folder is not empty: {path}"
+		raise ToolError(f"folder is not empty: {path}")
 	os.rmdir(full)
 	return f"removed folder {path}"
 
@@ -518,16 +522,16 @@ def _calc(node):
 	if isinstance(node, ast.BinOp) and type(node.op) in CALC_OPS:
 		left, right = _calc(node.left), _calc(node.right)
 		if isinstance(node.op, ast.Pow) and isinstance(left, int) and isinstance(right, int) and right > 0 and left.bit_length() * right > 100000:
-			raise ValueError("result too large")
+			raise ToolError("result too large")
 		return CALC_OPS[type(node.op)](left, right)
 	if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in CALC_FUNCS and not node.keywords:
 		return CALC_FUNCS[node.func.id](*[_calc(a) for a in node.args])
-	raise ValueError("unsupported expression")
+	raise ToolError("unsupported expression")
 
 
 def calculator(expression):
 	if len(expression) > 500:
-		return "expression too long"
+		raise ToolError("expression too long")
 	return str(_calc(ast.parse(expression.strip(), mode="eval")))
 
 
@@ -559,21 +563,21 @@ def todo(action, item=None):
 		return _todo_show(items)
 	if action == "add":
 		if not item:
-			return "item text required"
+			raise ToolError("item text required")
 		items.append([False, str(item).replace("\n", " ")])
 	elif action in ("done", "remove"):
 		try:
 			number = int(item)
 		except (TypeError, ValueError):
-			return "item must be the number from the list"
+			raise ToolError("item must be the number from the list")
 		if not 1 <= number <= len(items):
-			return f"no item {number}"
+			raise ToolError(f"no item {number}")
 		if action == "done":
 			items[number - 1][0] = True
 		else:
 			del items[number - 1]
 	else:
-		return f"unknown action: {action} (add, done, remove, list)"
+		raise ToolError(f"unknown action: {action} (add, done, remove, list)")
 	os.makedirs(SYSTEM_DIR, exist_ok=True)
 	with open(os.path.join(SYSTEM_DIR, TODO_FILE), "w", encoding="utf-8") as f:
 		f.write("".join(f"- [{'x' if done else ' '}] {text}\n" for done, text in items))
@@ -588,7 +592,7 @@ def _execute(command, shell=False):
 	except subprocess.TimeoutExpired:
 		os.killpg(process.pid, signal.SIGKILL)
 		process.communicate()
-		return f"timed out after {COMMAND_TIMEOUT} seconds"
+		raise ToolError(f"timed out after {COMMAND_TIMEOUT} seconds")
 	output = stdout
 	if stderr:
 		output += ("\n" if output else "") + "[stderr]\n" + stderr
@@ -615,41 +619,53 @@ def run_command(command):
 def run_tool(name, arguments, tools):
 	try:
 		if name not in tools:
-			return f"tool not enabled: {name}"
+			raise ToolError(f"tool not enabled: {name}")
 		args = json.loads(arguments) if isinstance(arguments, str) else arguments
 		if name == "read_file":
-			return read_file(args["path"])
-		if name == "write_file":
-			return write_file(args["path"], args["content"])
-		if name == "edit_file":
-			return edit_file(args["path"], args["old"], args["new"])
-		if name == "append_file":
-			return append_file(args["path"], args["content"])
-		if name == "rename_file":
-			return rename_file(args["path"], args["new_path"])
-		if name == "copy_file":
-			return copy_file(args["path"], args["new_path"])
-		if name == "fetch_url":
-			return fetch_url(args["url"], args.get("path"))
-		if name == "delete_file":
-			return delete_file(args["path"])
-		if name == "current_time":
-			return current_time()
-		if name == "calculator":
-			return calculator(args["expression"])
-		if name == "todo":
-			return todo(args["action"], args.get("item"))
-		if name == "run_python":
-			return run_python(args["code"])
-		if name == "run_command":
-			return run_command(args["command"])
-		if name == "make_folder":
-			return make_folder(args["path"])
-		if name == "remove_folder":
-			return remove_folder(args["path"])
-		return f"unknown tool: {name}"
+			content = read_file(args["path"])
+		elif name == "write_file":
+			content = write_file(args["path"], args["content"])
+		elif name == "edit_file":
+			content = edit_file(args["path"], args["old"], args["new"])
+		elif name == "append_file":
+			content = append_file(args["path"], args["content"])
+		elif name == "rename_file":
+			content = rename_file(args["path"], args["new_path"])
+		elif name == "copy_file":
+			content = copy_file(args["path"], args["new_path"])
+		elif name == "fetch_url":
+			content = fetch_url(args["url"], args.get("path"))
+		elif name == "delete_file":
+			content = delete_file(args["path"])
+		elif name == "current_time":
+			content = current_time()
+		elif name == "calculator":
+			content = calculator(args["expression"])
+		elif name == "todo":
+			content = todo(args["action"], args.get("item"))
+		elif name == "run_python":
+			content = run_python(args["code"])
+		elif name == "run_command":
+			content = run_command(args["command"])
+		elif name == "make_folder":
+			content = make_folder(args["path"])
+		elif name == "remove_folder":
+			content = remove_folder(args["path"])
+		else:
+			raise ToolError(f"unknown tool: {name}")
+		return content, None
+	except ToolError as e:
+		return str(e), str(e)
 	except Exception as e:
-		return f"error: {type(e).__name__}: {e}"
+		message = f"error: {type(e).__name__}: {e}"
+		return message, message
+
+
+def find_tool_result(turn, tool_call_id):
+	for m in turn:
+		if m.get("type") == "tool_result" and m.get("tool_call_id") == tool_call_id:
+			return m
+	return None
 
 
 def tool_summary(name, arguments):
@@ -658,40 +674,48 @@ def tool_summary(name, arguments):
 	except Exception:
 		args = {}
 	if name == "read_file":
-		return f"Read {args.get('path', '?')}"
+		return f"read {args.get('path', '?')}"
 	if name == "write_file":
-		return f"Wrote {args.get('path', '?')}"
+		return f"save {args.get('path', '?')}"
 	if name == "edit_file":
-		return f"Edited {args.get('path', '?')}"
+		return f"edit {args.get('path', '?')}"
 	if name == "append_file":
-		return f"Appended to {args.get('path', '?')}"
+		return f"append to {args.get('path', '?')}"
 	if name == "rename_file":
-		return f"Renamed {args.get('path', '?')} to {args.get('new_path', '?')}"
+		return f"rename {args.get('path', '?')} to {args.get('new_path', '?')}"
 	if name == "copy_file":
-		return f"Copied {args.get('path', '?')} to {args.get('new_path', '?')}"
+		return f"copy {args.get('path', '?')} to {args.get('new_path', '?')}"
 	if name == "fetch_url":
 		if args.get("path"):
-			return f"Downloaded {args.get('url', '?')} to {args['path']}"
-		return f"Fetched {args.get('url', '?')}"
+			return f"download {args.get('url', '?')} to {args['path']}"
+		return f"fetch {args.get('url', '?')}"
 	if name == "delete_file":
-		return f"Deleted {args.get('path', '?')}"
+		return f"delete {args.get('path', '?')}"
 	if name == "current_time":
-		return "Checked the current time"
+		return "check time"
 	if name == "calculator":
-		return f"Calculated {args.get('expression', '?')}"
+		return "calculate"
 	if name == "todo":
-		item = args.get("item")
-		return f"Todo {args.get('action', '?')}" + (f": {item}" if item else "")
+		action = args.get("action")
+		if action == "add":
+			return "add todo"
+		if action == "done":
+			return "complete todo"
+		if action == "remove":
+			return "remove todo"
+		if action == "list":
+			return "list todos"
+		return "todo"
 	if name == "run_python":
-		code = (args.get("code") or "").strip().splitlines()
-		return f"Ran Python: {code[0][:40]}" if code else "Ran Python"
+		return "run python"
 	if name == "run_command":
 		command = (args.get("command") or "").strip()
-		return f"Ran: {command[:40]}"
+		program = os.path.basename(command.split()[0]) if command.split() else ""
+		return f"run {program}" if program else "run a command"
 	if name == "make_folder":
-		return f"Created folder {args.get('path', '?')}"
+		return f"mkdir {args.get('path', '?')}"
 	if name == "remove_folder":
-		return f"Removed folder {args.get('path', '?')}"
+		return f"rmdir {args.get('path', '?')}"
 	return name
 
 
@@ -795,8 +819,11 @@ def session_message(prompt, model, reasoning=True, session=None, tools=None):
 					call["function"]["arguments"] = "{}"
 			add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
 			for call in calls:
-				output = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
-				add({"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output})
+				output, error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
+				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
+				if error:
+					record["error"] = {"message": error}
+				add(record)
 			continue
 		if not message.get("content"):
 			reason = result["choices"][0].get("finish_reason")
