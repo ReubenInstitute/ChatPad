@@ -116,30 +116,41 @@
 	<div class="chatbox chatbox-fixed">
 	<form action="/api/message/{{ session_id }}" method="post">
 		<div class="opt-reasoning">
-			<input type="checkbox" name="reasoning" id="reasoning" checked>
-			<label for="reasoning">Reasoning</label>
+			<div class="tool-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)">Think</div>
+			<input type="hidden" name="reasoning" value="1">
 		</div>
-		<div class="opt-model">
-			<select name="model" id="model">
-				{% for model in MODELS %}
-					<option value="{{ model.id }}" {% if model.id == default_model %}selected{% endif %}>
-						{{ model.id }}
-					</option>
-				{% endfor %}
-			</select>
-		</div>
+
+		<div class="input-row">
 		<div class="input">
 			<textarea name="prompt" id="prompt" rows="2" placeholder="Message" required></textarea>
 		</div>
 
-		<div class="opt-tools">
+		<button type="submit" title="Send">&rarr;</button>
+		</div>
+
+		<div class="model-list collapsed">
+			{% for model in MODELS %}
+				<div class="model-toggle {% if model.id == default_model %}enabled{% endif %}" data-id="{{ model.id }}" onclick="selectModel(this)">{{ model.id }}</div>
+			{% endfor %}
+		</div>
+
+		<div class="tools-list collapsed">
 			{% for tool in TOOLS %}
 				<div class="tool-toggle" data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>
 				<input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
 			{% endfor %}
 		</div>
 
-		<button type="submit" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
+		<div class="opt-row">
+		<div class="opt-models">
+			<div class="opt-header" id="model-header" onclick="toggleModelList()">{{ default_model }}</div>
+			<input type="hidden" name="model" id="model-input" value="{{ default_model }}">
+		</div>
+
+		<div class="opt-tools">
+			<div class="opt-header" onclick="toggleToolsList()">Tools</div>
+		</div>
+		</div>
 	</form>
 	</div>
 	</div>

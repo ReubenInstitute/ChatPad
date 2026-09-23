@@ -55,6 +55,7 @@ function toggleTool(el) {
 	const input = el.nextElementSibling;
 	const enabled = el.classList.toggle('enabled');
 	input.disabled = !enabled;
+	saveEnabledTools();
 }
 
 function restoreEnabledTools() {
@@ -77,10 +78,71 @@ function saveEnabledTools() {
 	localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify(enabled));
 }
 
+const REASONING_STORAGE_KEY = 'chatpad-reasoning-enabled';
+
+function toggleReasoning(el) {
+	const input = el.nextElementSibling;
+	const enabled = el.classList.toggle('enabled');
+	input.disabled = !enabled;
+	saveReasoning();
+}
+
+function restoreReasoning() {
+	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	if (!el) return;
+	const input = el.nextElementSibling;
+	const saved = localStorage.getItem(REASONING_STORAGE_KEY);
+	const on = saved === null ? true : saved === 'true';
+	el.classList.toggle('enabled', on);
+	input.disabled = !on;
+}
+
+function saveReasoning() {
+	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	if (!el) return;
+	localStorage.setItem(REASONING_STORAGE_KEY, el.classList.contains('enabled'));
+}
+
+const MODEL_STORAGE_KEY = 'chatpad-selected-model';
+
+function toggleModelList() {
+	const list = document.querySelector('.model-list');
+	const collapsed = list.classList.toggle('collapsed');
+	if (!collapsed) {
+		document.querySelector('.tools-list').classList.add('collapsed');
+	}
+}
+
+function toggleToolsList() {
+	const list = document.querySelector('.tools-list');
+	const collapsed = list.classList.toggle('collapsed');
+	if (!collapsed) {
+		document.querySelector('.model-list').classList.add('collapsed');
+	}
+}
+
+function selectModel(el) {
+	document.querySelectorAll('.model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
+	el.classList.add('enabled');
+	document.getElementById('model-input').value = el.dataset.id;
+	document.getElementById('model-header').textContent = el.dataset.id;
+	document.querySelector('.model-list').classList.add('collapsed');
+	saveSelectedModel();
+}
+
+function restoreSelectedModel() {
+	const saved = localStorage.getItem(MODEL_STORAGE_KEY);
+	if (!saved) return;
+	const el = document.querySelector(`.model-toggle[data-id="${CSS.escape(saved)}"]`);
+	if (el) selectModel(el);
+}
+
+function saveSelectedModel() {
+	localStorage.setItem(MODEL_STORAGE_KEY, document.getElementById('model-input').value);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 	restoreEnabledTools();
-	const form = document.querySelector('.chatbox form');
-	if (form) {
-		form.addEventListener('submit', saveEnabledTools);
-	}
+	restoreSelectedModel();
+	restoreReasoning();
 });
