@@ -14,6 +14,7 @@
 	--time-text: #2e8b40;
 	--tool-off-text: #222222;
 	--tool-on-text: #2e8b40;
+	--bar-border: #cccccc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +34,7 @@
 		--time-text: #6fcf7a;
 		--tool-off-text: #e0e0e0;
 		--tool-on-text: #6fcf7a;
+		--bar-border: #ffffff;
 	}
 }
 
@@ -168,6 +170,7 @@ nav {
 	right: 0;
 	bottom: 0;
 	background: var(--bar-bg);
+	border-top: 1px solid var(--bar-border);
 	padding: 10px 0;
 	z-index: 10;
 	}
@@ -176,6 +179,20 @@ nav {
 	width: min(760px, calc(100% - 40px));
 	box-sizing: border-box;
 	margin: 0 auto;
+	}
+
+.system-model.chatbox-fixed {
+	width: min(760px, calc(100% - 40px));
+	box-sizing: border-box;
+	margin: 0 auto 6px;
+	}
+
+.system-model .opt-header {
+	text-align: right;
+	}
+
+.system-model .opt-header.hidden {
+	display: none;
 	}
 
 .messages {

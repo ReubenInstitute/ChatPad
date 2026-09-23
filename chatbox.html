@@ -1,4 +1,14 @@
 	<div class="chatbox-bar">
+	<div class="system-model chatbox-fixed">
+		<div class="opt-header" id="system-model-header" onclick="toggleSystemModelList()">{{ default_model or MODELS[0].id }}</div>
+		<div class="model-list collapsed" id="system-model-list">
+			<div class="opt-header" onclick="toggleSystemModelList()">Models</div>
+			{% for model in MODELS %}
+				<div class="model-toggle {% if model.id == (default_model or MODELS[0].id) %}enabled{% endif %}" data-id="{{ model.id }}" onclick="selectSystemModel(this)">{{ model.id }}</div>
+			{% endfor %}
+		</div>
+	</div>
+
 	<div class="chatbox chatbox-fixed">
 	<form action="{% if session_id %}/api/message/{{ session_id }}{% else %}/api/message{% endif %}" method="post">
 		<div class="opt-reasoning">
@@ -14,7 +24,7 @@
 		<button type="submit" title="Send">&rarr;</button>
 		</div>
 
-		<div class="model-list collapsed">
+		<div class="model-list collapsed" id="model-list">
 			{% for model in MODELS %}
 				<div class="model-toggle {% if model.id == (default_model or MODELS[0].id) %}enabled{% endif %}" data-id="{{ model.id }}" onclick="selectModel(this)">{{ model.id }}</div>
 			{% endfor %}

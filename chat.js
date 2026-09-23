@@ -106,7 +106,7 @@ function saveReasoning() {
 const MODEL_STORAGE_KEY = 'chatpad-selected-model';
 
 function toggleModelList() {
-	const list = document.querySelector('.model-list');
+	const list = document.getElementById('model-list');
 	const collapsed = list.classList.toggle('collapsed');
 	if (!collapsed) {
 		document.querySelector('.tools-list').classList.add('collapsed');
@@ -117,23 +117,23 @@ function toggleToolsList() {
 	const list = document.querySelector('.tools-list');
 	const collapsed = list.classList.toggle('collapsed');
 	if (!collapsed) {
-		document.querySelector('.model-list').classList.add('collapsed');
+		document.getElementById('model-list').classList.add('collapsed');
 	}
 }
 
 function selectModel(el) {
-	document.querySelectorAll('.model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
+	document.querySelectorAll('#model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
 	document.getElementById('model-input').value = el.dataset.id;
 	document.getElementById('model-header').textContent = el.dataset.id;
-	document.querySelector('.model-list').classList.add('collapsed');
+	document.getElementById('model-list').classList.add('collapsed');
 	saveSelectedModel();
 }
 
 function restoreSelectedModel() {
 	const saved = localStorage.getItem(MODEL_STORAGE_KEY);
 	if (!saved) return;
-	const el = document.querySelector(`.model-toggle[data-id="${CSS.escape(saved)}"]`);
+	const el = document.querySelector(`#model-list .model-toggle[data-id="${CSS.escape(saved)}"]`);
 	if (el) selectModel(el);
 }
 
@@ -141,8 +141,32 @@ function saveSelectedModel() {
 	localStorage.setItem(MODEL_STORAGE_KEY, document.getElementById('model-input').value);
 }
 
+const SYSTEM_MODEL_STORAGE_KEY = 'chatpad-system-model';
+
+function toggleSystemModelList() {
+	const collapsed = document.getElementById('system-model-list').classList.toggle('collapsed');
+	document.getElementById('system-model-header').classList.toggle('hidden', !collapsed);
+}
+
+function selectSystemModel(el) {
+	document.querySelectorAll('#system-model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
+	el.classList.add('enabled');
+	document.getElementById('system-model-header').textContent = el.dataset.id;
+	document.getElementById('system-model-header').classList.remove('hidden');
+	document.getElementById('system-model-list').classList.add('collapsed');
+	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
+}
+
+function restoreSystemModel() {
+	const saved = localStorage.getItem(SYSTEM_MODEL_STORAGE_KEY);
+	if (!saved) return;
+	const el = document.querySelector(`#system-model-list .model-toggle[data-id="${CSS.escape(saved)}"]`);
+	if (el) selectSystemModel(el);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 	restoreEnabledTools();
 	restoreSelectedModel();
 	restoreReasoning();
+	restoreSystemModel();
 });
