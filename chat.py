@@ -199,6 +199,10 @@ def unarchive_session(session_id):
 		os.replace(src, _session_path(session_id, False))
 
 
+def is_archived(session_id):
+	return os.path.isfile(_session_path(session_id, True))
+
+
 def read_session_messages(session_id):
 	path = _session_path(session_id, False)
 	if not os.path.isfile(path):
@@ -251,6 +255,17 @@ def list_sessions(archived=False):
 		sessions.append((session_id, timestamp_str, title))
 	sessions.sort(key=lambda x: x[1], reverse=True)
 	return sessions
+
+
+def group_sessions_by_day(sessions):
+	groups = []
+	for session in sessions:
+		day = session[1][:8]
+		if groups and groups[-1][0] == day:
+			groups[-1][1].append(session)
+		else:
+			groups.append((day, [session]))
+	return groups
 
 MAX_STEPS = 20
 
@@ -800,16 +815,17 @@ def session_message(prompt, model, reasoning=True, session=None, tools=None):
 		record["uuid"] = name[:-5]
 		existing.append((name, record))
 		write_session_messages(session, existing)
+		return record
 
-	add({"type": "prompt", "content": prompt, "model": model})
+	yield add({"type": "prompt", "content": prompt, "model": model})
 	for step in range(MAX_STEPS):
 		result = OpenRouter.message(build_messages(existing), model, reasoning, active_tools)
 		if "error" in result:
-			add({"type": "error", "error": result["error"], "model": model})
-			return {"session": session}
+			yield add({"type": "error", "error": result["error"], "model": model})
+			return
 		message = result["choices"][0]["message"]
 		if message.get("reasoning"):
-			add({"type": "reasoning", "content": message["reasoning"]})
+			yield add({"type": "reasoning", "content": message["reasoning"]})
 		calls = message.get("tool_calls")
 		if calls:
 			for call in calls:
@@ -817,23 +833,22 @@ def session_message(prompt, model, reasoning=True, session=None, tools=None):
 					json.loads(call["function"]["arguments"])
 				except Exception:
 					call["function"]["arguments"] = "{}"
-			add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
+			yield add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
 			for call in calls:
 				output, error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
 				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
 				if error:
 					record["error"] = {"message": error}
-				add(record)
+				yield add(record)
 			continue
 		if not message.get("content"):
 			reason = result["choices"][0].get("finish_reason")
-			add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model})
-			return {"session": session}
+			yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model})
+			return
 		cost = (result.get("usage") or {}).get("cost")
-		add({"type": "response", "content": message.get("content"), "model": model, "cost": cost})
-		return {"session": session}
-	add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model})
-	return {"session": session}
+		yield add({"type": "response", "content": message.get("content"), "model": model, "cost": cost})
+		return
+	yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model})
 
 
 

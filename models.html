@@ -3,12 +3,11 @@
 {% block title %}Models{% endblock %}
 
 {% macro models_table(models, icons) %}
+	<div class="table-scroll">
 	<table>
 		<thead>
 			<tr>
-				<th></th>
-				<th>Name</th>
-				<th>Description</th>
+				<th>Model</th>
 				<th>Context Length</th>
 				<th>Tools</th>
 				<th>Vision</th>
@@ -27,10 +26,9 @@
 			<tr>
 				<td>
 					{% set icon = icons.get(model.id.split('/')[0].lstrip('~')) %}
-					{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}
+					<h4>{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %} {{ model.name }}</h4>
+					<span class="model-description">{{ model.description }}</span>
 				</td>
-				<td>{{ model.name }}</td>
-				<td>{{ model.description }}</td>
 				<td>{{ model.context_length|format_number }}</td>
 
 				<!-- Capabilities -->
@@ -74,6 +72,7 @@
 		{% endfor %}
 		</tbody>
 	</table>
+	</div>
 {% endmacro %}
 
 {% block content %}

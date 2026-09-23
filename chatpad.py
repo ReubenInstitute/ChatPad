@@ -1,9 +1,10 @@
 import os
+import json
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
+from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
 import markdown
 from openrouter import OpenRouter
-from chat import session_message, list_sessions, get_session, group_turns, archive_session, unarchive_session, tool_summary, find_tool_result, TOOLS
+from chat import session_message, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS
 import re
 from rotate_keys import rotate
 
@@ -63,6 +64,26 @@ def format_time_filter(ts):
 	except:
 		return ts
 
+@app.template_filter('format_hm')
+def format_hm_filter(ts):
+	if not ts:
+		return ""
+	try:
+		dt = datetime.strptime(ts[:14], '%Y%m%d%H%M%S')
+		return dt.strftime('%H:%M')
+	except:
+		return ts
+
+@app.template_filter('format_day')
+def format_day_filter(day):
+	if not day:
+		return ""
+	try:
+		dt = datetime.strptime(day, '%Y%m%d')
+		return dt.strftime('%d %b')
+	except:
+		return day
+
 app.jinja_env.globals['tool_summary'] = tool_summary
 app.jinja_env.globals['find_tool_result'] = find_tool_result
 
@@ -111,18 +132,23 @@ def show_models():
 
 @app.route('/')
 def index():
-	sessions = list_sessions()
-	return render_template('index.html', sessions=sessions)
+	return redirect('/chat')
 
 @app.route('/archive')
 def archive():
-	sessions = list_sessions(archived=True)
+	sessions = group_sessions_by_day(list_sessions(archived=True))
 	return render_template('archive.html', sessions=sessions)
 
 @app.route('/session/<session_id>')
 @app.route('/archive/<session_id>')
-def view_session(session_id):
-	messages = get_session(session_id)
+def view_session_redirect(session_id):
+	return redirect(f'/chat/{session_id}')
+
+@app.route('/chat')
+@app.route('/chat/<session_id>')
+def chat_view(session_id=None):
+	sessions = group_sessions_by_day(list_sessions()) if session_id is None else None
+	messages = get_session(session_id) if session_id else []
 	model_list = OpenRouter.models()
 	default_model = next((m["model"] for m in reversed(messages) if m.get("model")), None)
 	if default_model:
@@ -131,8 +157,10 @@ def view_session(session_id):
 		default_model = model_list[0]["id"]
 	else:
 		default_model = None
-	return render_template('session.html',
+	return render_template('chat.html',
 						   session_id=session_id,
+						   sessions=sessions,
+						   archived=is_archived(session_id) if session_id else False,
 						   turns=group_turns(messages),
 						   default_model=default_model,
 						   icons=model_icons())
@@ -140,12 +168,12 @@ def view_session(session_id):
 @app.route('/api/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):
 	archive_session(session_id)
-	return redirect(f'/archive/{session_id}')
+	return redirect(f'/chat/{session_id}')
 
 @app.route('/api/<session_id>/unarchive', methods=['POST'])
 def unarchive_session_route(session_id):
 	unarchive_session(session_id)
-	return redirect(f'/session/{session_id}')
+	return redirect(f'/chat/{session_id}')
 
 @app.route('/api/markdown', methods=['POST'])
 def api_markdown():
@@ -172,8 +200,22 @@ def api_message(session_id=None):
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	session = session_id or request.form.get('session')
-	response = session_message(prompt, model, reasoning, session, tools)
-	return redirect(f'/session/{response["session"]}')
+	for record in session_message(prompt, model, reasoning, session, tools):
+		session = record["session"]
+	return redirect(f'/chat/{session}')
+
+@app.route('/api/blocks', methods=['POST'])
+@app.route('/api/<session_id>/blocks', methods=['POST'])
+def api_blocks(session_id=None):
+	prompt = request.form.get('prompt')
+	model = request.form.get('model', 'stealth/ox-alpha')
+	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
+	session = session_id or request.form.get('session')
+	def generate():
+		for record in session_message(prompt, model, reasoning, session, tools):
+			yield f"data: {json.dumps(record)}\n\n"
+	return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/rotate-keys', methods=['POST'])
 def rotate_keys():
@@ -181,7 +223,7 @@ def rotate_keys():
 		rotate()
 	except SystemExit as e:
 		return str(e), 500
-	return redirect('/?rotated=1')
+	return redirect('/chat?rotated=1')
 
 
 

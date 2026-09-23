@@ -77,6 +77,7 @@ class OpenRouter:
 				"overridden_pricing": overridden_pricing
 			})
 
+		result.sort(key=lambda m: m["id"])
 		return result
 
 	@staticmethod

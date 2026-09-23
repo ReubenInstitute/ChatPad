@@ -3,19 +3,6 @@
 {% block title %}Archive{% endblock %}
 
 {% block content %}
-	<h1>Archive</h1>
-
-	<table>
-		<tr>
-			<th>Created</th>
-			<th>Session</th>
-		</tr>
-		{% for session_id, timestamp, title in sessions %}
-		<tr>
-			<td>{{ timestamp|format_timestamp }}</td>
-			<td><a href="/archive/{{ session_id }}">{{ title }}</a></td>
-		</tr>
-		{% endfor %}
-	</table>
+	{% include "sessions.html" %}
 
 {% endblock %}
