@@ -10,14 +10,11 @@ def api_key():
 
 
 class Model:
-	def __init__(self, provider, id, **fields):
+	def __init__(self, provider, id, free, **fields):
 		self.provider = provider
 		self.id = id
+		self.free = free
 		self.__dict__.update(fields)
-
-	@property
-	def is_free(self):
-		return self.id.endswith(":free")
 
 	def message(self, messages, think, tools):
 		real_id = self.id.split('/', 1)[1]
@@ -71,7 +68,7 @@ class OpenRouter:
 				overrides_conditions.append(cond)
 				overridden_pricing.append(price_ov)
 
-			result.append(Model(self, f"openrouter/{model.get('id')}",
+			result.append(Model(self, f"openrouter/{model.get('id')}", model.get("id", "").endswith(":free"),
 				name=model.get("name"),
 				description=model.get("description"),
 				context_length=model.get("context_length"),
@@ -88,7 +85,7 @@ class OpenRouter:
 
 	@property
 	def free_models(self):
-		return [m for m in self.models if m.is_free]
+		return [m for m in self.models if m.free]
 
 	def message(self, messages, model=None, think=False, tools=None):
 		print("\033[94mhttps://openrouter.ai/api/v1/chat/completions\033[0m", flush=True)

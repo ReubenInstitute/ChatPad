@@ -1,125 +1,85 @@
-from flask import Flask, render_template, request, session, jsonify
-from openai import OpenAI
-import markdown
+import json
 import os
-import requests
 import time
+import requests
 
-app = Flask(__name__, template_folder='.', static_folder='.', static_url_path='/')
-app.secret_key = os.urandom(24)
+from openrouter import Model
 
-try:
-	with open("deepseek.txt", "r") as f:
-		DEEPSEEK_API_KEY = f.read().strip()
-except FileNotFoundError:
-	DEEPSEEK_API_KEY = None
-	print("Error: deepseek.txt not found. Please create this file with your DeepSeek API key.")
-except Exception as e:
-	DEEPSEEK_API_KEY = None
-	print(f"Error reading deepseek.txt: {e}")
 
-DEEPSEEK_API_BASE = "https://api.deepseek.com/v1"
-CHAT_MODEL_NAME = "deepseek-chat"
-REASONING_MODEL_NAME = "deepseek-reasoner"
-BALANCE_URL = "https://api.deepseek.com/user/balance"
+def api_key():
+	with open(os.path.join(os.path.dirname(__file__), "deepseek.txt"), "r") as f:
+		return f.read().strip()
 
-if DEEPSEEK_API_KEY:
-	client = OpenAI(
-		api_key=DEEPSEEK_API_KEY,
-		base_url=DEEPSEEK_API_BASE
-	)
-else:
-	client = None
-	print("DeepSeek API client not initialized due to missing API key")
 
-balance_cache = {
-	"last_fetch": 0,
-	"data": None
-}
+class DeepSeek:
+	timeout = 120
 
-def get_user_balance():
-	global balance_cache
-	if time.time() - balance_cache["last_fetch"] < 30 and balance_cache["data"]:
-		return balance_cache["data"]
-	if not DEEPSEEK_API_KEY:
-		return None
-	try:
+	def __init__(self):
+		self._cache = None
+
+	def load_models(self):
+		print("\033[94mhttps://api.deepseek.com/v1/models\033[0m", flush=True)
+		headers = {"Authorization": f"Bearer {api_key()}"}
+		response = requests.get("https://api.deepseek.com/v1/models", headers=headers, timeout=30)
+		self._cache = response.json()["data"]
+
+	@property
+	def models(self):
+		if self._cache is None:
+			return []
+		result = []
+		for model in self._cache:
+			result.append(Model(self, f"deepseek/deepseek/{model.get('id')}", True,
+				name=model.get("name"),
+				description=None,
+				context_length=model.get("context_window"),
+				supported_parameters=["tools", "reasoning"],
+				input_modalities=model.get("input_modalities"),
+				output_modalities=model.get("output_modalities"),
+				pricing={},
+				overrides=[],
+				overridden_pricing=[],
+			))
+		result.sort(key=lambda m: m.id)
+		return result
+
+	@property
+	def free_models(self):
+		return self.models
+
+	def message(self, messages, model, think=False, tools=None):
+		print("\033[94mhttps://api.deepseek.com/v1/chat/completions\033[0m", flush=True)
+		url = "https://api.deepseek.com/v1/chat/completions"
 		headers = {
-			"Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-			"Accept": "application/json"
+			"Authorization": f"Bearer {api_key()}",
+			"Content-Type": "application/json"
 		}
-		response = requests.get(BALANCE_URL, headers=headers)
-		if response.status_code == 200:
-			balance_data = response.json()
-			balance_cache = {
-				"last_fetch": time.time(),
-				"data": balance_data
-			}
-			return balance_data
-		return None
-	except Exception as e:
-		print(f"Error fetching balance: {e}")
-		return None
-
-@app.route("/")
-def index():
-	processed_messages = []
-	if "chat_history" in session:
+		payload = {
+			"model": model.split('/', 1)[1],  # drop the "deepseek/" vendor segment, real API wants just deepseek-flash
+			"messages": messages,
+			"effort": "high" if think else "low",
+		}
+		if tools:
+			payload["tools"] = tools
 		try:
-			for msg in session["chat_history"]:
-				processed_msg = {
-					'role': msg['role'],
-					'content_html': markdown.markdown(msg['content'])
-				}
-				if 'reasoning_content' in msg and msg['reasoning_content']:
-					processed_msg['reasoning_html'] = markdown.markdown(msg['reasoning_content'])
-				processed_messages.append(processed_msg)
+			response = requests.post(url, headers=headers, json=payload, timeout=(10, DeepSeek.timeout), stream=True)
+			deadline = time.monotonic() + DeepSeek.timeout
+			body = b""
+			for chunk in response.iter_content(8192):
+				body += chunk
+				if time.monotonic() > deadline:
+					raise TimeoutError(f"no complete reply after {DeepSeek.timeout} seconds")
+			result = json.loads(body)
+			if "error" in result:
+				error = result["error"]
+				return {"error": {"message": error.get("message", str(error)), "code": error.get("code")}}
+			raw_message = result["choices"][0]["message"]
+			message = {"role": raw_message.get("role"), "content": raw_message.get("content")}
+			if raw_message.get("reasoning_content"):
+				message["reasoning"] = raw_message["reasoning_content"]
+			if raw_message.get("tool_calls"):
+				message["tool_calls"] = raw_message["tool_calls"]
+			result["choices"][0]["message"] = message
+			return result
 		except Exception as e:
-			print(f"Error processing messages: {e}")
-	balance_data = get_user_balance()
-	return render_template("deepseek.html", messages=processed_messages, balance=balance_data)
-
-@app.route("/chat", methods=["POST"])
-def chat():
-	if not client:
-		return jsonify({"error": "DeepSeek API client not configured"}), 500
-	if "chat_history" not in session:
-		session["chat_history"] = []
-	data = request.get_json()
-	user_message = data["message"]
-	use_reasoning = data.get("use_reasoning", False)
-	model_to_use = REASONING_MODEL_NAME if use_reasoning else CHAT_MODEL_NAME
-	session["chat_history"].append({"role": "user", "content": user_message})
-	session.modified = True
-	try:
-		api_messages = [{"role": msg["role"], "content": msg["content"]} 
-				for msg in session["chat_history"]]
-		response = client.chat.completions.create(
-			model=model_to_use,
-			messages=api_messages,
-			stream=False
-		)
-		content = response.choices[0].message.content or ""
-		reasoning = getattr(response.choices[0].message, "reasoning_content", "") or ""
-		session["chat_history"].append({
-			"role": "assistant",
-			"content": content,
-			"reasoning_content": reasoning
-		})
-		session.modified = True
-		return jsonify({
-			"content": content,
-			"reasoning": reasoning,
-			"balance": get_user_balance()
-		})
-	except Exception as e:
-		error_msg = f"Error: {str(e)}"
-		return jsonify({"error": error_msg}), 500
-
-@app.route("/balance", methods=["GET"])
-def get_balance():
-	balance_data = get_user_balance()
-	return jsonify(balance_data)
-
-if __name__ == "__main__":
-	app.run(debug=True, port=5000)
+			return {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}

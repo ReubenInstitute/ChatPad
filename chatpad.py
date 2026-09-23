@@ -245,4 +245,5 @@ def serve_file(filename):
 if __name__ == "__main__":
 	if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
 		chat.openrouter.load_models()
+		chat.deepseek.load_models()
 	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)

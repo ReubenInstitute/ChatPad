@@ -21,6 +21,7 @@ import requests
 import io
 
 from openrouter import OpenRouter
+from deepseek import DeepSeek
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
@@ -31,6 +32,7 @@ MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4
 class Chat:
 	def __init__(self):
 		self.openrouter = OpenRouter()
+		self.deepseek = DeepSeek()
 
 	@property
 	def sessions(self):
@@ -46,11 +48,11 @@ class Chat:
 
 	@property
 	def models(self):
-		return self.openrouter.models
+		return self.openrouter.models + self.deepseek.models
 
 	@property
 	def free_models(self):
-		return self.openrouter.free_models
+		return self.openrouter.free_models + self.deepseek.free_models
 
 	def resolve_model(self, model_id):
 		for m in self.models:
