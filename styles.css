@@ -267,12 +267,12 @@ button {
 	align-items: start;
 	}
 
-.chatbox .opt-reasoning, .chatbox .opt-models, .chatbox .opt-tools {
+.chatbox .opt-reasoning, .chatbox .opt-models, .chatbox .opt-tools, .chatbox .opt-refresh-models {
 	font-size: 0.8rem;
 	color: #999999;
 	}
 
-.chatbox .opt-reasoning, .chatbox .opt-tools {
+.chatbox .opt-reasoning, .chatbox .opt-tools, .chatbox .opt-refresh-models {
 	flex: 0 0 auto;
 	}
 
@@ -442,6 +442,16 @@ td.cap {
 .session-time {
 	color: #999999;
 	margin-right: 10px;
+	}
+
+.session-raw-link {
+	margin-left: 10px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background: var(--link);
+	color: #ffffff;
+	font-size: 0.75rem;
+	text-decoration: none;
 	}
 
 .model-description {

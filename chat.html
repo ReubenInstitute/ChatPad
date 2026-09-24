@@ -45,7 +45,7 @@
 						</div>
 					</div>
 					<div style="display:none;">
-						<span>{{ msg.content[:30] }}</span>
+						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
 					</div>
 				</div>
 			{% elif msg.type == "tool_call" %}
@@ -91,7 +91,7 @@
 						</div>
 					</div>
 					<div style="display:none;">
-						<span>{{ msg.content[:30] }}</span>
+						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
 					</div>
 				</div>
 			{% endif %}
@@ -112,6 +112,7 @@
 			<button type="submit">Archive</button>
 		</form>
 		{% endif %}
+		<a href="/api/{{ session_id }}/raw" class="session-raw-link">raw</a>
 	{% endif %}
 	</div>
 
@@ -166,6 +167,10 @@
 
 		<div class="opt-tools">
 			<div class="opt-header" onclick="toggleToolsList()" title="Tools">🛠️</div>
+		</div>
+
+		<div class="opt-refresh-models">
+			<div class="opt-header" onclick="refreshModels()" title="Refresh model list">🔄</div>
 		</div>
 		</div>
 	</form>

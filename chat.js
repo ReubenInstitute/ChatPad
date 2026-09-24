@@ -122,6 +122,11 @@ function toggleToolsList() {
 	}
 }
 
+async function refreshModels() {
+	await fetch('/api/refresh-models', { method: 'POST' });
+	location.reload();
+}
+
 function selectModel(el) {
 	document.querySelectorAll('#model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
@@ -264,7 +269,7 @@ async function appendReasoningBlock(turnDiv, record) {
 	const html = await renderMarkdown(record.content);
 	const contentNode = document.createElement('div');
 	contentNode.innerHTML = html;
-	const div = buildBlock('reasoning', contentNode, short(record.content));
+	const div = buildBlock('reasoning', contentNode, short(contentNode.textContent));
 	div.children[0].style.display = 'block';
 	div.children[1].style.display = 'none';
 	turnDiv.appendChild(div);
@@ -274,7 +279,7 @@ async function appendResponseBlock(turnDiv, record) {
 	const html = await renderMarkdown(record.content);
 	const contentNode = document.createElement('div');
 	contentNode.innerHTML = html;
-	const div = buildBlock('response', contentNode, short(record.content));
+	const div = buildBlock('response', contentNode, short(contentNode.textContent));
 	div.children[0].style.display = 'block';
 	div.children[1].style.display = 'none';
 	turnDiv.appendChild(div);
@@ -331,9 +336,9 @@ function ensureMessagesContainer() {
 	if (el) return el;
 	el = document.createElement('div');
 	el.className = 'messages';
-	const clearance = document.querySelector('.chatbox-clearance');
-	if (clearance) clearance.before(el);
-	else document.body.appendChild(el);
+	const archiveControls = document.getElementById('archive-controls');
+	if (archiveControls) archiveControls.before(el);
+	else document.querySelector('main').appendChild(el);
 	return el;
 }
 

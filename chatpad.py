@@ -99,7 +99,7 @@ def markdown_filter(text):
 
 
 
-@app.route("/session/<session_id>/raw")
+@app.route("/api/<session_id>/raw")
 def raw_view(session_id):
     messages = get_session(session_id)
     if not messages:
@@ -165,7 +165,7 @@ def chat_view(session_id=None):
 @app.route('/api/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):
 	archive_session(session_id)
-	return redirect(f'/chat/{session_id}')
+	return redirect('/chat')
 
 @app.route('/api/<session_id>/unarchive', methods=['POST'])
 def unarchive_session_route(session_id):
@@ -226,6 +226,12 @@ def rotate_keys():
 	except SystemExit as e:
 		return str(e), 500
 	return redirect('/chat?rotated=1')
+
+@app.route('/api/refresh-models', methods=['POST'])
+def refresh_models_route():
+	chat.openrouter.load_models()
+	chat.deepseek.load_models()
+	return '', 204
 
 
 

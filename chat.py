@@ -270,7 +270,7 @@ def unarchive_session(session_id):
 
 
 def is_archived(session_id):
-	return os.path.isfile(_session_path(session_id, True))
+	return os.path.isfile(_session_path(session_id, True)) and not os.path.isfile(_session_path(session_id, False))
 
 
 def read_session_messages(session_id):
