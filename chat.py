@@ -379,10 +379,28 @@ class ToolError(Exception):
 
 
 def _resolve(name):
-	# a relative path inside system/; no "..", no absolute paths, no symlinks
+	# Expand ~ to home directory first
+	name = os.path.expanduser(name)
+	
+	# Allow absolute paths for sdcard and storage
+	if name.startswith("/"):
+		# Normalize the path
+		full = os.path.normpath(name)
+		# Resolve symlinks to check the real path
+		real_full = os.path.realpath(full)
+		# Allow /sdcard, /storage/emulated/0 and their subdirectories
+		allowed_prefixes = ("/sdcard", "/storage/emulated/0")
+		if not any(real_full.startswith(p) for p in allowed_prefixes):
+			raise ToolError(f"invalid path: {name} (absolute paths only allowed under /sdcard or /storage/emulated/0)")
+		# Check for traversal attempts
+		if ".." in name:
+			raise ToolError(f"invalid path: {name}")
+		return full
+	
+	# Relative paths: resolve within SYSTEM_DIR (existing behavior)
 	if name.strip("/") in ("", "."):
 		return SYSTEM_DIR
-	if "\\" in name or name.startswith("/"):
+	if "\\" in name:
 		raise ToolError(f"invalid path: {name}")
 	full = SYSTEM_DIR
 	for part in name.rstrip("/").split("/"):
