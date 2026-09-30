@@ -107,6 +107,19 @@ def raw_view(session_id):
             prompt = re.sub(r'\[FILE: ([^\]]+)\]\s*\n\[FILE_CONTENT_START\].*?\n\[FILE_CONTENT_END: \1\]', lambda m: f"[FILE: {m.group(1)}]", msg['content'], flags=re.DOTALL)
             prompt = re.sub(r'\n{3,}', '\n\n', prompt).strip()
             text_parts.append(prompt)
+        elif msg['type'] == 'reasoning' and msg.get('content'):
+            text_parts.append(f"[reasoning] {msg['content']}")
+            text_parts.append('')
+        elif msg['type'] == 'tool_call':
+            for call in msg.get('tool_calls') or []:
+                text_parts.append(f"[tool call] {tool_summary(call['function']['name'], call['function']['arguments'])}")
+                result = find_tool_result(messages, call['id'])
+                if result:
+                    output = result.get('content') or ''
+                    if len(output) > 200:
+                        output = output[:200] + f"... ({len(output)} chars)"
+                    text_parts.append(f"[tool result] {output}")
+            text_parts.append('')
         elif msg['type'] == 'response' and msg.get('content') is not None:
             text_parts.append(f"[{msg['model']}] {msg['content']}")
             text_parts.append('')
