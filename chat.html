@@ -105,7 +105,7 @@
 						{% if msg.usage.prompt_tokens %}Prompt: {{ msg.usage.prompt_tokens }}{% endif %}
 						{% if msg.usage.completion_tokens %}{% if msg.usage.prompt_tokens %} | {% endif %}Completion: {{ msg.usage.completion_tokens }}{% endif %}
 						{% if msg.usage.total_tokens %}{% if msg.usage.prompt_tokens or msg.usage.completion_tokens %} | {% endif %}Total: {{ msg.usage.total_tokens }}{% endif %}
-						{% if msg.usage.cost is not none %}{% if msg.usage.prompt_tokens or msg.usage.completion_tokens or msg.usage.total_tokens %} | {% endif %}Cost: ${{ "%.6f"|format(msg.usage.cost) }}{% endif %}
+						{% if msg.cost is not none %}{% if msg.usage.prompt_tokens or msg.usage.completion_tokens or msg.usage.total_tokens %} | {% endif %}Cost: ${{ "%.6f"|format(msg.cost) }}{% endif %}
 					</small>
 				</div>
 				{% endif %}
