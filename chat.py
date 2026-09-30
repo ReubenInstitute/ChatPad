@@ -401,21 +401,21 @@ def _tool(name, description, properties, required=None):
 	}
 
 TOOLS = [
-	_tool("read_file", "Read a file, or list a folder (read_file(\".\") lists the top level). Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
-	_tool("write_file", "Create a file, or replace it if it exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
-	_tool("edit_file", "Replace one piece of text in a file. `old` must appear exactly once; include enough surrounding text to make it unique. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
-	_tool("append_file", "Add text to the end of a file, creating it if needed. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "content": {"type": "string"}}),
-	_tool("rename_file", "Rename a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
-	_tool("copy_file", "Copy a file. Fails if the new name already exists. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("read_file", "Read a file, or list a folder.", {"path": {"type": "string"}}),
+	_tool("write_file", "Create a file, or replace it if it exists.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("edit_file", "Replace one piece of text in a file. `old` must appear exactly once; include enough surrounding text to make it unique.", {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
+	_tool("append_file", "Add text to the end of a file, creating it if needed.", {"path": {"type": "string"}, "content": {"type": "string"}}),
+	_tool("rename_file", "Rename a file. Fails if the new name already exists.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
+	_tool("copy_file", "Copy a file. Fails if the new name already exists.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
 	_tool("fetch_url", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
-	_tool("delete_file", "Delete a file. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("delete_file", "Delete a file.", {"path": {"type": "string"}}),
 	_tool("current_time", "Get the current date and time on the server.", {}),
 	_tool("calculator", "Evaluate an arithmetic expression exactly. Supports + - * / // % **, parentheses, pi, e, and sqrt sin cos tan log log10 exp floor ceil abs round min max.", {"expression": {"type": "string"}}),
-	_tool("todo", "Keep a todo list (stored in todo.md in the workspace). Actions: add (item is the text), done (item is the number), remove (item is the number), list. Returns the updated list.", {"action": {"type": "string", "enum": ["add", "done", "remove", "list"]}, "item": {"type": "string"}}, required=["action"]),
-	_tool("run_python", "Run Python 3 code in the workspace folder and return what it prints, including errors. Each call is a fresh process, so print anything you want to see.", {"code": {"type": "string"}}),
-	_tool("run_command", "Run a shell command in the workspace folder and return its output, including errors. Each call is a fresh shell, so cd does not carry over; pipes and && work.", {"command": {"type": "string"}}),
-	_tool("make_folder", "Create a folder, including any missing parent folders. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
-	_tool("remove_folder", "Remove an empty folder. Paths are relative to the workspace, e.g. notes.txt or docs/a.txt.", {"path": {"type": "string"}}),
+	_tool("todo", "Keep a todo list (stored in todo.md). Actions: add (item is the text), done (item is the number), remove (item is the number), list. Returns the updated list.", {"action": {"type": "string", "enum": ["add", "done", "remove", "list"]}, "item": {"type": "string"}}, required=["action"]),
+	_tool("run_python", "Run Python 3 code and return what it prints, including errors. Each call is a fresh process, so print anything you want to see.", {"code": {"type": "string"}}),
+	_tool("run_command", "Run a shell command and return its output, including errors. Each call is a fresh shell, so cd does not carry over; pipes and && work.", {"command": {"type": "string"}}),
+	_tool("make_folder", "Create a folder, including any missing parent folders.", {"path": {"type": "string"}}),
+	_tool("remove_folder", "Remove an empty folder.", {"path": {"type": "string"}}),
 ]
 
 
@@ -424,8 +424,8 @@ class ToolError(Exception):
 
 
 def _resolve(name):
-	name = os.path.expanduser(name)
-	if name.strip("/") in ("", "."):
+	name = os.path.expanduser(name).lstrip("/")
+	if name in ("", "."):
 		return SYSTEM_DIR
 	return os.path.normpath(os.path.join(SYSTEM_DIR, name))
 
