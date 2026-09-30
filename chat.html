@@ -24,7 +24,7 @@
 							<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
 							{{ msg.content }}
 						</div>
-						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
 						<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
@@ -44,7 +44,7 @@
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
-						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
 						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
@@ -62,7 +62,7 @@
 								<div class="tool-raw">{{ result.content }}</div>
 							{% endif %}
 						</div>
-						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
 						<span>{{ tool_summary(call.function.name, call.function.arguments) }}</span>
@@ -81,7 +81,7 @@
 								<p>{{ msg.error.metadata.raw }}</p>
 							{% endif %}
 						</div>
-						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
 						<span>{{ msg.error.message[:30] }}</span>
@@ -93,7 +93,7 @@
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
-						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
 						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
@@ -112,7 +112,7 @@
 			{% endif %}
 			{% endfor %}
 			<div class="message-actions">
-				<span class="hide-icon" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history">H</span>
+				<span class="hide-icon" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history"><i data-lucide="eye-off"></i></span>
 			</div>
 		</div>
 	{% endfor %}
@@ -151,7 +151,7 @@
 	<div class="chatbox chatbox-fixed">
 	<form id="chat-form" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
 		<div class="opt-reasoning">
-			<div class="tool-toggle emoji-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)" title="Think">🧠</div>
+			<div class="tool-toggle emoji-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
 			<input type="hidden" name="reasoning" value="1">
 		</div>
 
@@ -160,7 +160,7 @@
 			<textarea name="prompt" id="prompt" rows="2" placeholder="Message" required></textarea>
 		</div>
 
-		<button type="submit" title="Send">&rarr;</button>
+		<button type="submit" title="Send"><i data-lucide="arrow-up"></i></button>
 		</div>
 
 		<div class="model-list collapsed" id="model-list">
@@ -184,11 +184,11 @@
 		</div>
 
 		<div class="opt-tools">
-			<div class="opt-header" onclick="toggleToolsList()" title="Tools">🛠️</div>
+			<div class="opt-header" onclick="toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
 		</div>
 
 		<div class="opt-refresh-models">
-			<div class="opt-header" onclick="refreshModels()" title="Refresh model list">🔄</div>
+			<div class="opt-header" onclick="refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
 		</div>
 		</div>
 	</form>

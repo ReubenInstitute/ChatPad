@@ -200,10 +200,19 @@ nav {
 
 .copy-icon, .hide-icon {
 	cursor: pointer;
-	font-size: 0.75rem;
-	font-weight: bold;
 	opacity: 0.5;
 	line-height: 1;
+	}
+
+.copy-icon svg, .hide-icon svg, .opt-header svg, .tool-toggle svg {
+	width: 14px;
+	height: 14px;
+	vertical-align: middle;
+	}
+
+.chatbox button svg {
+	width: 18px;
+	height: 18px;
 	}
 
 .copy-icon {
@@ -241,6 +250,7 @@ nav {
 	}
 
 .system-model.chatbox-fixed {
+	display: none;
 	width: min(760px, calc(100% - 40px));
 	box-sizing: border-box;
 	margin: 0 auto 6px;
@@ -294,6 +304,9 @@ button {
 	color: #ffffff;
 	font-size: 1.1rem;
 	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	}
 
 .chatbox .opt-row {
@@ -378,8 +391,13 @@ button {
 	}
 
 .emoji-toggle {
-	font-size: 1.1rem;
 	opacity: 0.35;
+	}
+
+.emoji-toggle svg {
+	width: 16px;
+	height: 16px;
+	vertical-align: middle;
 	}
 
 .emoji-toggle.enabled {
