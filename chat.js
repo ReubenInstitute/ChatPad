@@ -182,6 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	restoreSystemModel();
 	initLiveChat();
 	initChatboxClearance();
+	lucide.createIcons();
 });
 
 function initChatboxClearance() {
@@ -270,8 +271,47 @@ async function appendPromptBlock(turnDiv, record) {
 	}
 }
 
-async function appendReasoningBlock(turnDiv, record) {
+function ensureLiveBlock(turnDiv, liveState, target) {
+	if (liveState[target]) return liveState[target];
+	const className = target === 'reasoning' ? 'reasoning' : 'response';
+	const contentNode = document.createElement('div');
+	const div = buildBlock(className, contentNode, '');
+	div.children[0].style.display = 'block';
+	div.children[1].style.display = 'none';
+	turnDiv.appendChild(div);
+	const state = { div, content: div.children[0].querySelector('.content'), html: '' };
+	liveState[target] = state;
+	window.scrollTo(0, document.body.scrollHeight);
+	return state;
+}
+
+function applyHtmlPatch(turnDiv, liveState, target, patchText) {
+	const state = ensureLiveBlock(turnDiv, liveState, target);
+	const dmp = new diff_match_patch();
+	const patches = dmp.patch_fromText(patchText);
+	const [newHtml] = dmp.patch_apply(patches, state.html);
+	state.html = newHtml;
+	state.content.innerHTML = newHtml;
+	window.scrollTo(0, document.body.scrollHeight);
+}
+
+function discardLiveBlock(liveState, target) {
+	const state = liveState && liveState[target];
+	if (state) {
+		state.div.remove();
+		liveState[target] = null;
+	}
+}
+
+async function appendReasoningBlock(turnDiv, record, liveState) {
 	const html = await renderMarkdown(record.content);
+	const live = liveState && liveState.reasoning;
+	if (live) {
+		live.content.innerHTML = html;
+		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
+		liveState.reasoning = null;
+		return;
+	}
 	const contentNode = document.createElement('div');
 	contentNode.innerHTML = html;
 	const div = buildBlock('reasoning', contentNode, short(contentNode.textContent));
@@ -280,14 +320,21 @@ async function appendReasoningBlock(turnDiv, record) {
 	turnDiv.appendChild(div);
 }
 
-async function appendResponseBlock(turnDiv, record) {
+async function appendResponseBlock(turnDiv, record, liveState) {
 	const html = await renderMarkdown(record.content);
-	const contentNode = document.createElement('div');
-	contentNode.innerHTML = html;
-	const div = buildBlock('response', contentNode, short(contentNode.textContent));
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
-	turnDiv.appendChild(div);
+	const live = liveState && liveState.response;
+	if (live) {
+		live.content.innerHTML = html;
+		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
+		liveState.response = null;
+	} else {
+		const contentNode = document.createElement('div');
+		contentNode.innerHTML = html;
+		const div = buildBlock('response', contentNode, short(contentNode.textContent));
+		div.children[0].style.display = 'block';
+		div.children[1].style.display = 'none';
+		turnDiv.appendChild(div);
+	}
 
 	// Add usage info if available
 	if (record.usage) {
@@ -321,7 +368,8 @@ async function appendErrorBlock(turnDiv, record) {
 	turnDiv.appendChild(div);
 }
 
-function appendToolCallBlock(turnDiv, record) {
+function appendToolCallBlock(turnDiv, record, liveState) {
+	discardLiveBlock(liveState, 'response');
 	record.tool_calls.forEach(call => {
 		const contentNode = document.createElement('div');
 		const summary = document.createElement('div');
@@ -384,13 +432,15 @@ function promoteToSession(sessionId) {
 	if (table) table.style.display = 'none';
 }
 
-async function handleBlock(turnDiv, record) {
+async function handleBlock(turnDiv, record, liveState) {
 	if (!liveSessionId) promoteToSession(record.session);
 	if (record.type === 'prompt') await appendPromptBlock(turnDiv, record);
-	else if (record.type === 'reasoning') await appendReasoningBlock(turnDiv, record);
-	else if (record.type === 'response' && record.content) await appendResponseBlock(turnDiv, record);
+	else if (record.type === 'html_patch') applyHtmlPatch(turnDiv, liveState, record.target, record.patch);
+	else if (record.type === 'discard_block') discardLiveBlock(liveState, record.target);
+	else if (record.type === 'reasoning') await appendReasoningBlock(turnDiv, record, liveState);
+	else if (record.type === 'response' && record.content) await appendResponseBlock(turnDiv, record, liveState);
 	else if (record.type === 'error') await appendErrorBlock(turnDiv, record);
-	else if (record.type === 'tool_call') appendToolCallBlock(turnDiv, record);
+	else if (record.type === 'tool_call') appendToolCallBlock(turnDiv, record, liveState);
 	else if (record.type === 'tool_result') appendToolResultBlock(turnDiv, record);
 	window.scrollTo(0, document.body.scrollHeight);
 }
@@ -410,6 +460,7 @@ async function submitLiveChat(event) {
 	const turnDiv = document.createElement('div');
 	turnDiv.className = 'message';
 	ensureMessagesContainer().appendChild(turnDiv);
+	const liveState = { reasoning: null, response: null };
 
 	const url = liveSessionId ? `/api/${liveSessionId}/blocks` : '/api/blocks';
 	try {
@@ -426,7 +477,7 @@ async function submitLiveChat(event) {
 			for (const part of parts) {
 				if (!part.startsWith('data: ')) continue;
 				const record = JSON.parse(part.slice(6));
-				await handleBlock(turnDiv, record);
+				await handleBlock(turnDiv, record, liveState);
 			}
 		}
 	} finally {

@@ -99,21 +99,71 @@ class OpenRouter:
 		payload = {
 			"model": model,
 			"messages": messages,
-			"reasoning": {"enabled": think}
+			"reasoning": {"enabled": think},
+			"stream": True,
+			"stream_options": {"include_usage": True},
 		}
 		if tools:
 			payload["tools"] = tools
+
+		content_parts = []
+		reasoning_parts = []
+		tool_calls = {}
+		usage = {}
+		finish_reason = None
+
 		try:
 			response = requests.post(url, headers=headers, json=payload, timeout=(10, OpenRouter.timeout), stream=True)
 			deadline = time.monotonic() + OpenRouter.timeout
-			body = b""
-			for chunk in response.iter_content(8192):
-				body += chunk
+			for raw_line in response.iter_lines():
 				if time.monotonic() > deadline:
 					raise TimeoutError(f"no complete reply after {OpenRouter.timeout} seconds")
-			result = json.loads(body)
-			if "error" not in result:
-				result["choices"][0]["message"]
+				if not raw_line:
+					continue
+				line = raw_line.decode("utf-8")
+				if not line.startswith("data: "):
+					continue
+				data = line[len("data: "):]
+				if data == "[DONE]":
+					break
+				chunk = json.loads(data)
+				if "error" in chunk:
+					yield {"error": chunk["error"]}
+					return
+				if chunk.get("usage"):
+					usage = chunk["usage"]
+				choices = chunk.get("choices") or []
+				if not choices:
+					continue
+				choice = choices[0]
+				if choice.get("finish_reason"):
+					finish_reason = choice["finish_reason"]
+				delta = choice.get("delta") or {}
+				if delta.get("reasoning"):
+					reasoning_parts.append(delta["reasoning"])
+					yield {"delta": "reasoning", "text": delta["reasoning"]}
+				if delta.get("content"):
+					content_parts.append(delta["content"])
+					yield {"delta": "content", "text": delta["content"]}
+				if delta.get("tool_calls"):
+					for tc in delta["tool_calls"]:
+						idx = tc.get("index", 0)
+						call = tool_calls.setdefault(idx, {"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
+						if tc.get("id"):
+							call["id"] = tc["id"]
+						fn = tc.get("function") or {}
+						if fn.get("name"):
+							call["function"]["name"] += fn["name"]
+						if fn.get("arguments"):
+							call["function"]["arguments"] += fn["arguments"]
 		except Exception as e:
-			result = {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
-		return result
+			yield {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
+			return
+
+		message = {"role": "assistant", "content": "".join(content_parts) or None}
+		if reasoning_parts:
+			message["reasoning"] = "".join(reasoning_parts)
+		if tool_calls:
+			message["tool_calls"] = [tool_calls[i] for i in sorted(tool_calls)]
+		result = {"choices": [{"message": message, "finish_reason": finish_reason}], "usage": usage}
+		yield {"result": result}

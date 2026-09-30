@@ -58,31 +58,71 @@ class DeepSeek:
 			"model": model.split('/', 1)[1],  # drop the "deepseek/" vendor segment, real API wants just deepseek-flash
 			"messages": messages,
 			"effort": "high" if think else "low",
+			"stream": True,
+			"stream_options": {"include_usage": True},
 		}
 		if tools:
 			payload["tools"] = tools
+
+		content_parts = []
+		reasoning_parts = []
+		tool_calls = {}
+		usage = {}
+		finish_reason = None
+
 		try:
 			response = requests.post(url, headers=headers, json=payload, timeout=(10, DeepSeek.timeout), stream=True)
 			deadline = time.monotonic() + DeepSeek.timeout
-			body = b""
-			for chunk in response.iter_content(8192):
-				body += chunk
+			for raw_line in response.iter_lines():
 				if time.monotonic() > deadline:
 					raise TimeoutError(f"no complete reply after {DeepSeek.timeout} seconds")
-			result = json.loads(body)
-			if "error" in result:
-				error = result["error"]
-				return {"error": {"message": error.get("message", str(error)), "code": error.get("code")}}
-			raw_message = result["choices"][0]["message"]
-			message = {"role": raw_message.get("role"), "content": raw_message.get("content")}
-			if raw_message.get("reasoning_content"):
-				message["reasoning"] = raw_message["reasoning_content"]
-			if raw_message.get("tool_calls"):
-				message["tool_calls"] = raw_message["tool_calls"]
-			result["choices"][0]["message"] = message
-			# Preserve usage info from the API response
-			if "usage" in result:
-				result["usage"] = result["usage"]
-			return result
+				if not raw_line:
+					continue
+				line = raw_line.decode("utf-8")
+				if not line.startswith("data: "):
+					continue
+				data = line[len("data: "):]
+				if data == "[DONE]":
+					break
+				chunk = json.loads(data)
+				if "error" in chunk:
+					error = chunk["error"]
+					yield {"error": {"message": error.get("message", str(error)), "code": error.get("code")}}
+					return
+				if chunk.get("usage"):
+					usage = chunk["usage"]
+				choices = chunk.get("choices") or []
+				if not choices:
+					continue
+				choice = choices[0]
+				if choice.get("finish_reason"):
+					finish_reason = choice["finish_reason"]
+				delta = choice.get("delta") or {}
+				if delta.get("reasoning_content"):
+					reasoning_parts.append(delta["reasoning_content"])
+					yield {"delta": "reasoning", "text": delta["reasoning_content"]}
+				if delta.get("content"):
+					content_parts.append(delta["content"])
+					yield {"delta": "content", "text": delta["content"]}
+				if delta.get("tool_calls"):
+					for tc in delta["tool_calls"]:
+						idx = tc.get("index", 0)
+						call = tool_calls.setdefault(idx, {"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
+						if tc.get("id"):
+							call["id"] = tc["id"]
+						fn = tc.get("function") or {}
+						if fn.get("name"):
+							call["function"]["name"] += fn["name"]
+						if fn.get("arguments"):
+							call["function"]["arguments"] += fn["arguments"]
 		except Exception as e:
-			return {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
+			yield {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
+			return
+
+		message = {"role": "assistant", "content": "".join(content_parts) or None}
+		if reasoning_parts:
+			message["reasoning"] = "".join(reasoning_parts)
+		if tool_calls:
+			message["tool_calls"] = [tool_calls[i] for i in sorted(tool_calls)]
+		result = {"choices": [{"message": message, "finish_reason": finish_reason}], "usage": usage}
+		yield {"result": result}

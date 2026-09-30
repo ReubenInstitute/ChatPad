@@ -16,9 +16,19 @@ import math
 import operator
 import requests
 import io
+import markdown
+from diff_match_patch import diff_match_patch
 
 from openrouter import OpenRouter
 from deepseek import DeepSeek
+
+MARKDOWN_EXTENSIONS = ['tables', 'fenced_code', 'codehilite', 'nl2br']
+
+
+def render_markdown(text):
+	if text is None:
+		return ""
+	return markdown.markdown(text, extensions=MARKDOWN_EXTENSIONS)
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
@@ -77,34 +87,75 @@ class Chat:
 
 		yield add({"type": "prompt", "content": prompt, "model": model.id})
 		for step in range(MAX_STEPS):
-			result = model.message(build_messages(existing), reasoning, active_tools)
-			if "error" in result:
-				yield add({"type": "error", "error": result["error"], "model": model.id})
+			reasoning_parts = []
+			content_parts = []
+			reasoning_html = ""
+			content_html = ""
+			tool_calls = None
+			finish_reason = None
+			usage = {}
+			error = None
+			dmp = diff_match_patch()
+
+			for event in model.message(build_messages(existing), reasoning, active_tools):
+				if "error" in event:
+					error = event["error"]
+					break
+				kind = event.get("delta")
+				if kind == "reasoning":
+					reasoning_parts.append(event["text"])
+					new_html = render_markdown("".join(reasoning_parts))
+					patches = dmp.patch_make(reasoning_html, new_html)
+					if patches:
+						reasoning_html = new_html
+						yield {"type": "html_patch", "target": "reasoning", "patch": dmp.patch_toText(patches), "session": session}
+				elif kind == "content":
+					content_parts.append(event["text"])
+					new_html = render_markdown("".join(content_parts))
+					patches = dmp.patch_make(content_html, new_html)
+					if patches:
+						content_html = new_html
+						yield {"type": "html_patch", "target": "response", "patch": dmp.patch_toText(patches), "session": session}
+				elif "result" in event:
+					result = event["result"]
+					message = result["choices"][0]["message"]
+					finish_reason = result["choices"][0].get("finish_reason")
+					usage = result.get("usage") or {}
+					tool_calls = message.get("tool_calls")
+
+			if error:
+				if reasoning_parts:
+					yield {"type": "discard_block", "target": "reasoning", "session": session}
+				if content_parts:
+					yield {"type": "discard_block", "target": "response", "session": session}
+				yield add({"type": "error", "error": error, "model": model.id})
 				return
-			message = result["choices"][0]["message"]
-			if message.get("reasoning"):
-				yield add({"type": "reasoning", "content": message["reasoning"]})
-			calls = message.get("tool_calls")
-			if calls:
-				for call in calls:
+
+			if reasoning_parts:
+				yield add({"type": "reasoning", "content": "".join(reasoning_parts)})
+
+			if tool_calls:
+				for call in tool_calls:
 					try:
 						json.loads(call["function"]["arguments"])
 					except Exception:
 						call["function"]["arguments"] = "{}"
-				yield add({"type": "tool_call", "content": message.get("content"), "tool_calls": calls})
-				for call in calls:
-					output, error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
+				if content_parts:
+					yield {"type": "discard_block", "target": "response", "session": session}
+				yield add({"type": "tool_call", "content": "".join(content_parts) or None, "tool_calls": tool_calls})
+				for call in tool_calls:
+					output, tool_error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
 					record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
-					if error:
-						record["error"] = {"message": error}
+					if tool_error:
+						record["error"] = {"message": tool_error}
 					yield add(record)
 				continue
-			if not message.get("content"):
-				reason = result["choices"][0].get("finish_reason")
-				yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model.id})
+
+			if not content_parts:
+				yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {finish_reason})", "code": None}, "model": model.id})
 				return
-			usage = result.get("usage") or {}
-			yield add({"type": "response", "content": message.get("content"), "model": model.id, "cost": usage.get("cost"), "usage": usage})
+
+			yield add({"type": "response", "content": "".join(content_parts), "model": model.id, "cost": usage.get("cost"), "usage": usage})
 			return
 		yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model.id})
 

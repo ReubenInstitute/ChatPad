@@ -2,8 +2,7 @@ import os
 import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
-import markdown
-from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden
+from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden, render_markdown
 import re
 from rotate_keys import rotate
 
@@ -93,9 +92,7 @@ def inject_globals():
 
 @app.template_filter('markdown')
 def markdown_filter(text):
-	if text is None:
-		return ""
-	return markdown.markdown(text, extensions=['tables', 'fenced_code', 'codehilite', 'nl2br'])
+	return render_markdown(text)
 
 
 
@@ -175,7 +172,7 @@ def unarchive_session_route(session_id):
 @app.route('/api/markdown', methods=['POST'])
 def api_markdown():
 	text = request.form.get('text', '')
-	return markdown_filter(text)
+	return render_markdown(text)
 
 @app.route('/api/models')
 def api_models():
