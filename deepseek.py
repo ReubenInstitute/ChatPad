@@ -80,6 +80,9 @@ class DeepSeek:
 			if raw_message.get("tool_calls"):
 				message["tool_calls"] = raw_message["tool_calls"]
 			result["choices"][0]["message"] = message
+			# Preserve usage info from the API response
+			if "usage" in result:
+				result["usage"] = result["usage"]
 			return result
 		except Exception as e:
 			return {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
