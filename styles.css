@@ -148,6 +148,13 @@ nav {
 	font-size: 0.75rem;
 }
 
+.usage-info {
+	font-size: 0.7rem;
+	color: var(--description-text);
+	padding: 4px 10px;
+	margin-top: 2px;
+}
+
 .prompt, .reasoning, .tool, .error, .response {
 	cursor: pointer;
 	}
@@ -179,6 +186,34 @@ nav {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	}
+
+.message-hidden {
+	opacity: 0.4;
+	}
+
+.message-actions {
+	display: flex;
+	gap: 6px;
+	justify-content: flex-end;
+	}
+
+.copy-icon, .hide-icon {
+	cursor: pointer;
+	font-size: 0.75rem;
+	font-weight: bold;
+	opacity: 0.5;
+	line-height: 1;
+	}
+
+.copy-icon {
+	display: block;
+	text-align: right;
+	margin-top: 4px;
+	}
+
+.copy-icon:hover, .hide-icon:hover {
+	opacity: 1;
 	}
 
 

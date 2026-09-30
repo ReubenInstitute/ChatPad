@@ -14,9 +14,6 @@ import tempfile
 import ast
 import math
 import operator
-import socket
-import ipaddress
-from urllib.parse import urlparse, urljoin
 import requests
 import io
 
@@ -106,8 +103,8 @@ class Chat:
 				reason = result["choices"][0].get("finish_reason")
 				yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {reason})", "code": None}, "model": model.id})
 				return
-			cost = (result.get("usage") or {}).get("cost")
-			yield add({"type": "response", "content": message.get("content"), "model": model.id, "cost": cost})
+			usage = result.get("usage") or {}
+			yield add({"type": "response", "content": message.get("content"), "model": model.id, "cost": usage.get("cost"), "usage": usage})
 			return
 		yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model.id})
 
@@ -337,12 +334,9 @@ def group_sessions_by_day(sessions):
 			groups.append((day, [session]))
 	return groups
 
-MAX_STEPS = 20
+MAX_STEPS = 50
 
-# started in the app folder: the workspace is its system/ folder; started anywhere else: that folder is the workspace
-SYSTEM_DIR = os.path.join(APP_DIR, "system") if os.path.realpath(os.getcwd()) == os.path.realpath(APP_DIR) else os.getcwd()
-MAX_READ = 100000
-MAX_SAVE = 10 * 1024 * 1024
+SYSTEM_DIR = os.getcwd()
 COMMAND_TIMEOUT = 30
 
 def _tool(name, description, properties, required=None):
@@ -379,93 +373,34 @@ class ToolError(Exception):
 
 
 def _resolve(name):
-	# Expand ~ to home directory first
 	name = os.path.expanduser(name)
-	
-	# Allow absolute paths for sdcard and storage
-	if name.startswith("/"):
-		# Normalize the path
-		full = os.path.normpath(name)
-		# Resolve symlinks to check the real path
-		real_full = os.path.realpath(full)
-		# Allow /sdcard, /storage/emulated/0 and their subdirectories
-		allowed_prefixes = ("/sdcard", "/storage/emulated/0")
-		if not any(real_full.startswith(p) for p in allowed_prefixes):
-			raise ToolError(f"invalid path: {name} (absolute paths only allowed under /sdcard or /storage/emulated/0)")
-		# Check for traversal attempts
-		if ".." in name:
-			raise ToolError(f"invalid path: {name}")
-		return full
-	
-	# Relative paths: resolve within SYSTEM_DIR (existing behavior)
 	if name.strip("/") in ("", "."):
 		return SYSTEM_DIR
-	if "\\" in name:
-		raise ToolError(f"invalid path: {name}")
-	full = SYSTEM_DIR
-	for part in name.rstrip("/").split("/"):
-		if part in ("", ".", ".."):
-			raise ToolError(f"invalid path: {name}")
-		full = os.path.join(full, part)
-		if os.path.islink(full):
-			raise ToolError(f"invalid path: {name}")
-	return full
+	return os.path.normpath(os.path.join(SYSTEM_DIR, name))
 
 
 def read_file(path):
 	full = _resolve(path)
-	if not os.path.exists(full):
-		if full == SYSTEM_DIR:
-			return "(empty)"
-		raise ToolError(f"not found: {path}")
 	if os.path.isdir(full):
-		lines = []
-		for n in sorted(os.listdir(full)):
-			p = os.path.join(full, n)
-			lines.append(f"{n}/" if os.path.isdir(p) else f"{n}  {os.path.getsize(p)} bytes")
-		return "\n".join(lines) or "(empty)"
-	try:
-		with open(full, "r", encoding="utf-8") as f:
-			text = f.read(MAX_READ + 1)
-	except UnicodeDecodeError:
-		return f"binary file, {os.path.getsize(full)} bytes"
-	if len(text) > MAX_READ:
-		text = text[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
-	return text
+		return "\n".join(sorted(os.listdir(full)))
+	with open(full, "r", encoding="utf-8") as f:
+		return f.read()
 
 
 def write_file(path, content):
 	full = _resolve(path)
-	if full == SYSTEM_DIR or os.path.isdir(full):
-		raise ToolError(f"invalid name: {path}")
-	os.makedirs(SYSTEM_DIR, exist_ok=True)
-	if not os.path.isdir(os.path.dirname(full)):
-		raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(content)
 	return f"wrote {len(content)} characters to {path}"
 
 
-def _existing_file(path):
-	full = _resolve(path)
-	if full == SYSTEM_DIR or os.path.isdir(full):
-		raise ToolError(f"invalid name: {path}")
-	if not os.path.exists(full):
-		raise ToolError(f"not found: {path}")
-	return full
-
-
 def edit_file(path, old, new):
-	full = _existing_file(path)
-	if not old:
-		raise ToolError("old must not be empty")
+	full = _resolve(path)
 	with open(full, "r", encoding="utf-8") as f:
 		text = f.read()
 	count = text.count(old)
-	if count == 0:
-		raise ToolError(f"text not found in {path}")
-	if count > 1:
-		raise ToolError(f"text found {count} times in {path}; add more surrounding text to make it unique")
+	if count != 1:
+		raise ToolError(f"text found {count} times in {path}; it must appear exactly once")
 	with open(full, "w", encoding="utf-8") as f:
 		f.write(text.replace(old, new))
 	return f"edited {path}"
@@ -473,25 +408,16 @@ def edit_file(path, old, new):
 
 def append_file(path, content):
 	full = _resolve(path)
-	if full == SYSTEM_DIR or os.path.isdir(full):
-		raise ToolError(f"invalid name: {path}")
-	os.makedirs(SYSTEM_DIR, exist_ok=True)
-	if not os.path.isdir(os.path.dirname(full)):
-		raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
 	with open(full, "a", encoding="utf-8") as f:
 		f.write(content)
 	return f"appended {len(content)} characters to {path}"
 
 
 def _move_or_copy(path, new_path, action):
-	source = _existing_file(path)
+	source = _resolve(path)
 	target = _resolve(new_path)
-	if target == SYSTEM_DIR or os.path.isdir(target):
-		raise ToolError(f"invalid name: {new_path}")
 	if os.path.lexists(target):
 		raise ToolError(f"already exists: {new_path}")
-	if not os.path.isdir(os.path.dirname(target)):
-		raise ToolError(f"folder does not exist: {os.path.dirname(new_path)} (create it with make_folder)")
 	if action == "rename":
 		os.rename(source, target)
 	else:
@@ -507,98 +433,31 @@ def copy_file(path, new_path):
 	return _move_or_copy(path, new_path, "copy")
 
 
-def _check_url(url):
-	parts = urlparse(url)
-	if parts.scheme not in ("http", "https") or not parts.hostname:
-		raise ValueError(f"invalid url: {url} (http or https only)")
-	for info in socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)):
-		ip = ipaddress.ip_address(info[4][0])
-		if not ip.is_global:
-			raise ValueError(f"blocked: {parts.hostname} is not a public address")
-
-
-def _get(url):
-	for _ in range(6):
-		_check_url(url)
-		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20, stream=True, allow_redirects=False)
-		if response.is_redirect:
-			url = urljoin(url, response.headers["Location"])
-			continue
-		return response
-	raise ToolError("too many redirects")
-
-
 def fetch_url(url, path=None):
-	target = None
-	if path:
-		target = _resolve(path)
-		if target == SYSTEM_DIR or os.path.isdir(target):
-			raise ToolError(f"invalid name: {path}")
-		os.makedirs(SYSTEM_DIR, exist_ok=True)
-		if not os.path.isdir(os.path.dirname(target)):
-			raise ToolError(f"folder does not exist: {os.path.dirname(path)} (create it with make_folder)")
-	response = _get(url)
+	target = _resolve(path) if path else None
+	response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20)
 	if response.status_code != 200:
 		raise ToolError(f"HTTP {response.status_code}")
-	limit = MAX_SAVE if target else MAX_READ * 4
-	data = b""
-	for chunk in response.iter_content(65536):
-		data += chunk
-		if len(data) > limit:
-			break
-	truncated = len(data) > limit
+	data = response.content
 	if target:
-		if truncated:
-			raise ToolError(f"too large: over {MAX_SAVE} bytes, not saved")
 		with open(target, "wb") as f:
 			f.write(data)
 		return f"saved {len(data)} bytes to {path}"
-	try:
-		text = data.decode("utf-8")
-	except UnicodeDecodeError:
-		if not truncated:
-			return f"binary file, {len(data)} bytes"
-		text = data.decode("utf-8", errors="ignore")
-	if len(text) > MAX_READ:
-		text = text[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
-	return text
+	return data.decode("utf-8")
 
 
 def delete_file(path):
-	full = _resolve(path)
-	if full == SYSTEM_DIR:
-		raise ToolError(f"invalid name: {path}")
-	if os.path.isdir(full):
-		raise ToolError(f"{path} is a folder, use remove_folder")
-	if not os.path.exists(full):
-		raise ToolError(f"not found: {path}")
-	os.remove(full)
+	os.remove(_resolve(path))
 	return f"deleted {path}"
 
 
 def make_folder(path):
-	full = _resolve(path)
-	if full == SYSTEM_DIR:
-		raise ToolError(f"invalid name: {path}")
-	if os.path.isdir(full):
-		raise ToolError(f"already exists: {path}")
-	if os.path.exists(full):
-		raise ToolError(f"a file with that name exists: {path}")
-	os.makedirs(full)
+	os.makedirs(_resolve(path), exist_ok=True)
 	return f"created folder {path}"
 
 
 def remove_folder(path):
-	full = _resolve(path)
-	if full == SYSTEM_DIR:
-		raise ToolError(f"invalid name: {path}")
-	if not os.path.exists(full):
-		raise ToolError(f"not found: {path}")
-	if not os.path.isdir(full):
-		raise ToolError(f"{path} is a file, use delete_file")
-	if os.listdir(full):
-		raise ToolError(f"folder is not empty: {path}")
-	os.rmdir(full)
+	os.rmdir(_resolve(path))
 	return f"removed folder {path}"
 
 
@@ -701,8 +560,6 @@ def _execute(command, shell=False):
 		output += ("\n" if output else "") + "[stderr]\n" + stderr
 	if process.returncode != 0:
 		output += f"\n[exit code {process.returncode}]"
-	if len(output) > MAX_READ:
-		output = output[:MAX_READ] + f"\n[truncated at {MAX_READ} characters]"
 	return output or "(no output)"
 
 
@@ -834,8 +691,9 @@ def normalize(data):
 	if data.get("error"):
 		records.append({"type": "error", "error": data["error"], "model": data.get("model")})
 	if data.get("response"):
-		cost = (data.get("usage") or {}).get("cost")
-		records.append({"type": "response", "content": data["response"], "model": data.get("model"), "cost": cost})
+		usage = data.get("usage") or {}
+		cost = usage.get("cost")
+		records.append({"type": "response", "content": data["response"], "model": data.get("model"), "cost": cost, "usage": usage})
 	return records
 
 
@@ -843,6 +701,8 @@ def build_messages(existing):
 	records = [r for _, d in existing for r in normalize(d)]
 	messages = []
 	for turn in group_turns(records):
+		if turn[0].get("hidden"):
+			continue
 		types = {r["type"] for r in turn}
 		if "error" in types and not types & {"response", "tool_call"}:
 			continue  # the prompt got no answer, don't send it
@@ -857,6 +717,18 @@ def build_messages(existing):
 			elif t == "response" and r.get("content"):
 				messages.append({"role": "assistant", "content": r["content"]})
 	return messages
+
+
+def toggle_hidden(session_id, uuid):
+	messages = read_session_messages(session_id)
+	name = f"{uuid}.json"
+	for i, (n, data) in enumerate(messages):
+		if n == name:
+			data = dict(data)
+			data["hidden"] = not data.get("hidden", False)
+			messages[i] = (n, data)
+			break
+	write_session_messages(session_id, messages)
 
 
 def get_session(session_id):

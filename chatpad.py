@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
 import markdown
-from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS
+from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden
 import re
 from rotate_keys import rotate
 
@@ -206,6 +206,11 @@ def api_message(session_id=None):
 		session = record["session"]
 	return redirect(f'/chat/{session}')
 
+@app.route('/api/<session_id>/hide/<uuid>', methods=['POST'])
+def api_hide_message(session_id, uuid):
+	toggle_hidden(session_id, uuid)
+	return ('', 204)
+
 @app.route('/api/blocks', methods=['POST'])
 @app.route('/api/<session_id>/blocks', methods=['POST'])
 def api_blocks(session_id=None):
@@ -252,4 +257,7 @@ if __name__ == "__main__":
 	if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
 		chat.openrouter.load_models()
 		chat.deepseek.load_models()
-	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+	# Disable reloader to prevent restart on file changes
+	# Set FLASK_DEBUG=1 to enable debug mode without reloader, or FLASK_RUN_RELOAD=1 to enable reloader
+	use_reloader = os.environ.get("FLASK_RUN_RELOAD", "0") == "1"
+	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True, use_reloader=use_reloader)

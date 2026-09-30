@@ -1,8 +1,13 @@
 
-function copyContent(element) {
-	const expandedDiv = element.parentElement;
-	const text = expandedDiv.querySelector('.content').textContent;
-	navigator.clipboard.writeText(text);
+function copyBlock(button) {
+	const content = button.parentElement.querySelector('.content');
+	navigator.clipboard.writeText(content.textContent.trim());
+}
+
+async function hideMessageTurn(button, sessionId, uuid) {
+	const message = button.closest('.message');
+	message.classList.toggle('message-hidden');
+	await fetch(`/api/${sessionId}/hide/${uuid}`, { method: 'POST' });
 }
 
 
@@ -283,6 +288,21 @@ async function appendResponseBlock(turnDiv, record) {
 	div.children[0].style.display = 'block';
 	div.children[1].style.display = 'none';
 	turnDiv.appendChild(div);
+
+	// Add usage info if available
+	if (record.usage) {
+		const usageDiv = document.createElement('div');
+		usageDiv.className = 'usage-info';
+		const small = document.createElement('small');
+		let parts = [];
+		if (record.usage.prompt_tokens) parts.push('Prompt: ' + record.usage.prompt_tokens);
+		if (record.usage.completion_tokens) parts.push('Completion: ' + record.usage.completion_tokens);
+		if (record.usage.total_tokens) parts.push('Total: ' + record.usage.total_tokens);
+		if (record.usage.cost !== undefined && record.usage.cost !== null) parts.push('Cost: $' + record.usage.cost.toFixed(6));
+		small.textContent = parts.join(' | ');
+		usageDiv.appendChild(small);
+		turnDiv.appendChild(usageDiv);
+	}
 }
 
 async function appendErrorBlock(turnDiv, record) {

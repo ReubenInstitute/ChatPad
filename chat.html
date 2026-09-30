@@ -13,7 +13,7 @@
 {% if session_id %}
 	<div class="messages">
 	{% for turn in turns %}
-		<div class="message">
+		<div class="message{{ ' message-hidden' if turn[0].hidden else '' }}" data-uuid="{{ turn[0].uuid }}">
 			{% set resp_msgs = turn | selectattr('type', 'equalto', 'response') | list %}
 			{% set resp = resp_msgs[0] if resp_msgs and resp_msgs[0].content else None %}
 			{% for msg in turn %}
@@ -24,6 +24,7 @@
 							<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
 							{{ msg.content }}
 						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
 					</div>
 					<div style="display:none;">
 						<span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
@@ -43,6 +44,7 @@
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
 					</div>
 					<div style="display:none;">
 						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
@@ -60,6 +62,7 @@
 								<div class="tool-raw">{{ result.content }}</div>
 							{% endif %}
 						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
 					</div>
 					<div style="display:none;">
 						<span>{{ tool_summary(call.function.name, call.function.arguments) }}</span>
@@ -78,6 +81,7 @@
 								<p>{{ msg.error.metadata.raw }}</p>
 							{% endif %}
 						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
 					</div>
 					<div style="display:none;">
 						<span>{{ msg.error.message[:30] }}</span>
@@ -89,13 +93,27 @@
 						<div class="content">
 							{{ msg.content|markdown|safe }}
 						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy">C</span>
 					</div>
 					<div style="display:none;">
 						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
 					</div>
 				</div>
+				{% if msg.usage %}
+				<div class="usage-info">
+					<small>
+						{% if msg.usage.prompt_tokens %}Prompt: {{ msg.usage.prompt_tokens }}{% endif %}
+						{% if msg.usage.completion_tokens %}{% if msg.usage.prompt_tokens %} | {% endif %}Completion: {{ msg.usage.completion_tokens }}{% endif %}
+						{% if msg.usage.total_tokens %}{% if msg.usage.prompt_tokens or msg.usage.completion_tokens %} | {% endif %}Total: {{ msg.usage.total_tokens }}{% endif %}
+						{% if msg.usage.cost is not none %}{% if msg.usage.prompt_tokens or msg.usage.completion_tokens or msg.usage.total_tokens %} | {% endif %}Cost: ${{ "%.6f"|format(msg.usage.cost) }}{% endif %}
+					</small>
+				</div>
+				{% endif %}
 			{% endif %}
 			{% endfor %}
+			<div class="message-actions">
+				<span class="hide-icon" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history">H</span>
+			</div>
 		</div>
 	{% endfor %}
 	</div>
