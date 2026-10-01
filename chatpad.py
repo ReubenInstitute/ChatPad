@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
-from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden, render_markdown, find_pending_tool_calls_flat
+from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, NO_CONTENT_TOOLS, toggle_hidden, render_markdown, find_pending_tool_calls_flat
 import re
 from rotate_keys import rotate
 
@@ -85,6 +85,7 @@ def format_day_filter(day):
 
 app.jinja_env.globals['tool_summary'] = tool_summary
 app.jinja_env.globals['find_tool_result'] = find_tool_result
+app.jinja_env.globals['NO_CONTENT_TOOLS'] = NO_CONTENT_TOOLS
 
 @app.context_processor
 def inject_globals():

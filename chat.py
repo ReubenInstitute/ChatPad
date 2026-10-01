@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import ast
 import math
 import operator
@@ -81,7 +82,11 @@ class Chat:
 		add = _make_adder(session, existing)
 
 		yield add({"type": "prompt", "content": prompt, "model": model.id})
-		yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
+		add.save()
+		try:
+			yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
+		finally:
+			add.save()
 
 	def resume_tool_calls(self, session, action, model, reasoning=True, tools=None, mode="auto"):
 		active_tools = [t for t in TOOLS if t["function"]["name"] in tools] if tools is not None else []
@@ -96,6 +101,7 @@ class Chat:
 
 		if action == "stop":
 			yield add({"type": "tool_stopped"})
+			add.save()
 			return
 
 		for call in pending:
@@ -108,17 +114,28 @@ class Chat:
 					record["error"] = {"message": tool_error}
 			yield add(record)
 
-		yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
+		add.save()
+		try:
+			yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
+		finally:
+			add.save()
 
 
 def _make_adder(session, existing):
+	# Records land in `existing` straight away but only reach disk on save().
+	# Rewriting and bz2-recompressing the whole session archive per record is
+	# O(session length) and runs inside the SSE generator, stalling the stream.
 	def add(record):
 		name = next_name(existing[-1][0] if existing else None)
 		record["session"] = session
 		record["uuid"] = name[:-5]
 		existing.append((name, record))
-		write_session_messages(session, existing)
 		return record
+
+	def save():
+		write_session_messages(session, existing)
+
+	add.save = save
 	return add
 
 
@@ -148,6 +165,25 @@ def _run_steps(session, existing, model, reasoning, active_tools, tools, add, mo
 		usage = {}
 		error = None
 		dmp = diff_match_patch()
+		last_flush = time.monotonic()
+
+		def flush(target):
+			# Re-rendering the whole accumulated text and diffing it is O(length),
+			# so doing it on every token makes a long reply quadratic. Rate-limit
+			# it instead; the full text still arrives in the reasoning/response
+			# record at the end, so the unflushed tail is never lost.
+			nonlocal reasoning_html, content_html
+			parts = reasoning_parts if target == "reasoning" else content_parts
+			old_html = reasoning_html if target == "reasoning" else content_html
+			new_html = render_markdown("".join(parts))
+			if new_html == old_html:
+				return None
+			if target == "reasoning":
+				reasoning_html = new_html
+			else:
+				content_html = new_html
+			return {"type": "html_patch", "target": target,
+					"patch": dmp.patch_toText(dmp.patch_make(old_html, new_html)), "session": session}
 
 		for event in model.message(build_messages(existing), reasoning, active_tools):
 			if "error" in event:
@@ -156,18 +192,18 @@ def _run_steps(session, existing, model, reasoning, active_tools, tools, add, mo
 			kind = event.get("delta")
 			if kind == "reasoning":
 				reasoning_parts.append(event["text"])
-				new_html = render_markdown("".join(reasoning_parts))
-				patches = dmp.patch_make(reasoning_html, new_html)
-				if patches:
-					reasoning_html = new_html
-					yield {"type": "html_patch", "target": "reasoning", "patch": dmp.patch_toText(patches), "session": session}
+				if time.monotonic() - last_flush >= PATCH_INTERVAL:
+					last_flush = time.monotonic()
+					patch = flush("reasoning")
+					if patch:
+						yield patch
 			elif kind == "content":
 				content_parts.append(event["text"])
-				new_html = render_markdown("".join(content_parts))
-				patches = dmp.patch_make(content_html, new_html)
-				if patches:
-					content_html = new_html
-					yield {"type": "html_patch", "target": "response", "patch": dmp.patch_toText(patches), "session": session}
+				if time.monotonic() - last_flush >= PATCH_INTERVAL:
+					last_flush = time.monotonic()
+					patch = flush("response")
+					if patch:
+						yield patch
 			elif "result" in event:
 				result = event["result"]
 				message = result["choices"][0]["message"]
@@ -193,9 +229,14 @@ def _run_steps(session, existing, model, reasoning, active_tools, tools, add, mo
 				except Exception:
 					call["function"]["arguments"] = "{}"
 			if content_parts:
-				yield {"type": "discard_block", "target": "response", "session": session}
-			yield add({"type": "tool_call", "content": "".join(content_parts) or None, "tool_calls": tool_calls})
+				patch = flush("response")
+				if patch:
+					yield patch
+				yield {"type": "finalize_block", "target": "response", "session": session}
+			yield add({"type": "tool_call", "content": "".join(content_parts) or None, "tool_calls": tool_calls,
+					"labels": {c["id"]: tool_summary(c["function"]["name"], c["function"]["arguments"]) for c in tool_calls}})
 			if mode == "manual":
+				add.save()
 				yield {"type": "await_approval", "session": session}
 				return
 			for call in tool_calls:
@@ -204,6 +245,7 @@ def _run_steps(session, existing, model, reasoning, active_tools, tools, add, mo
 				if tool_error:
 					record["error"] = {"message": tool_error}
 				yield add(record)
+			add.save()
 			continue
 
 		if not content_parts:
@@ -442,6 +484,8 @@ def group_sessions_by_day(sessions):
 
 MAX_STEPS = 50
 
+PATCH_INTERVAL = 0.08
+
 SYSTEM_DIR = os.getcwd()
 COMMAND_TIMEOUT = 30
 
@@ -462,7 +506,8 @@ TOOLS = [
 	_tool("append_file", "Add text to the end of a file, creating it if needed.", {"path": {"type": "string"}, "content": {"type": "string"}}),
 	_tool("rename_file", "Rename a file. Fails if the new name already exists.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
 	_tool("copy_file", "Copy a file. Fails if the new name already exists.", {"path": {"type": "string"}, "new_path": {"type": "string"}}),
-	_tool("fetch_url", "Download from an http or https URL. With path, the file is saved there exactly as downloaded and only a short confirmation is returned (use this to download files). Without path, the content is returned as text.", {"url": {"type": "string"}, "path": {"type": "string"}}, required=["url"]),
+	_tool("get_url", "Fetch an http or https URL and return the content as text.", {"url": {"type": "string"}}),
+	_tool("download_url", "Download an http or https URL and save it to a path exactly as downloaded.", {"url": {"type": "string"}, "path": {"type": "string"}}),
 	_tool("delete_file", "Delete a file.", {"path": {"type": "string"}}),
 	_tool("current_time", "Get the current date and time on the server.", {}),
 	_tool("calculator", "Evaluate an arithmetic expression exactly. Supports + - * / // % **, parentheses, pi, e, and sqrt sin cos tan log log10 exp floor ceil abs round min max.", {"expression": {"type": "string"}}),
@@ -472,6 +517,10 @@ TOOLS = [
 	_tool("make_folder", "Create a folder, including any missing parent folders.", {"path": {"type": "string"}}),
 	_tool("remove_folder", "Remove an empty folder.", {"path": {"type": "string"}}),
 ]
+
+# tools whose result carries no content, so their block stays collapsed and
+# has nothing to expand to
+NO_CONTENT_TOOLS = {"rename_file", "copy_file", "delete_file", "make_folder", "remove_folder"}
 
 
 class ToolError(Exception):
@@ -539,16 +588,20 @@ def copy_file(path, new_path):
 	return _move_or_copy(path, new_path, "copy")
 
 
-def fetch_url(url, path=None):
-	target = _resolve(path) if path else None
+def get_url(url):
+	response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20)
+	if response.status_code != 200:
+		raise ToolError(f"HTTP {response.status_code}")
+	return response.content.decode("utf-8")
+
+
+def download_url(url, path):
 	response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20)
 	if response.status_code != 200:
 		raise ToolError(f"HTTP {response.status_code}")
 	data = response.content
-	if target:
-		with open(target, "wb") as f:
-			f.write(data)
-		return f"saved {len(data)} bytes to {path}"
+	with open(_resolve(path), "wb") as f:
+		f.write(data)
 	return data.decode("utf-8")
 
 
@@ -699,8 +752,10 @@ def run_tool(name, arguments, tools):
 			content = rename_file(args["path"], args["new_path"])
 		elif name == "copy_file":
 			content = copy_file(args["path"], args["new_path"])
-		elif name == "fetch_url":
-			content = fetch_url(args["url"], args.get("path"))
+		elif name == "get_url":
+			content = get_url(args["url"])
+		elif name == "download_url":
+			content = download_url(args["url"], args["path"])
 		elif name == "delete_file":
 			content = delete_file(args["path"])
 		elif name == "current_time":
@@ -742,46 +797,35 @@ def tool_summary(name, arguments):
 	if name == "read_file":
 		return f"read {args.get('path', '?')}"
 	if name == "write_file":
-		return f"save {args.get('path', '?')}"
+		return f"write {args.get('path', '?')}"
 	if name == "edit_file":
 		return f"edit {args.get('path', '?')}"
 	if name == "append_file":
-		return f"append to {args.get('path', '?')}"
+		return f"append {args.get('path', '?')}"
 	if name == "rename_file":
 		return f"rename {args.get('path', '?')} to {args.get('new_path', '?')}"
 	if name == "copy_file":
 		return f"copy {args.get('path', '?')} to {args.get('new_path', '?')}"
-	if name == "fetch_url":
-		if args.get("path"):
-			return f"download {args.get('url', '?')} to {args['path']}"
-		return f"fetch {args.get('url', '?')}"
+	if name == "get_url":
+		return f"get {args.get('url', '?')}"
+	if name == "download_url":
+		return f"download {args.get('url', '?')} to {args.get('path', '?')}"
 	if name == "delete_file":
 		return f"delete {args.get('path', '?')}"
 	if name == "current_time":
-		return "check time"
+		return "current time"
 	if name == "calculator":
-		return "calculate"
+		return f"calculate {args.get('expression', '?')}"
 	if name == "todo":
-		action = args.get("action")
-		if action == "add":
-			return "add todo"
-		if action == "done":
-			return "complete todo"
-		if action == "remove":
-			return "remove todo"
-		if action == "list":
-			return "list todos"
 		return "todo"
 	if name == "run_python":
 		return "run python"
 	if name == "run_command":
-		command = (args.get("command") or "").strip()
-		program = os.path.basename(command.split()[0]) if command.split() else ""
-		return f"run {program}" if program else "run a command"
+		return f"run {args.get('command', '?')}"
 	if name == "make_folder":
-		return f"mkdir {args.get('path', '?')}"
+		return f"make folder {args.get('path', '?')}"
 	if name == "remove_folder":
-		return f"rmdir {args.get('path', '?')}"
+		return f"remove folder {args.get('path', '?')}"
 	return name
 
 

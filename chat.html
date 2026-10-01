@@ -51,23 +51,42 @@
 					</div>
 				</div>
 			{% elif msg.type == "tool_call" %}
+				{% if msg.content %}
+				<div class="response" onclick="toggleMessage(this)">
+					<div>
+						<div class="content">
+							{{ msg.content|markdown|safe }}
+						</div>
+						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+					</div>
+					<div style="display:none;">
+						<span>{{ (msg.content|markdown|striptags)[:30] }}</span>
+					</div>
+				</div>
+				{% endif %}
 				{% for call in msg.tool_calls %}
 				{% set result = find_tool_result(turn, call.id) %}
+				{% set label = tool_summary(call.function.name, call.function.arguments) %}
+				{% if call.function.name in NO_CONTENT_TOOLS %}
+				<div class="tool tool-static{{ ' error' if result and result.error else '' }}">
+					<div><span>{{ label }}</span>{% if result and result.error %} <span>{{ result.error.message }}</span>{% endif %}</div>
+				</div>
+				{% else %}
 				<div class="tool{{ ' error' if result and result.error else '' }}" onclick="toggleMessage(this)">
 					<div>
 						<div class="content">
-							<div class="tool-summary">{{ tool_summary(call.function.name, call.function.arguments) }}</div>
-							<div class="tool-raw">{{ call.function.name }}({{ call.function.arguments }})</div>
-							{% if result %}
+							<div class="tool-summary">{{ label }}</div>
+							{% if result and result.content %}
 								<div class="tool-raw">{{ result.content }}</div>
 							{% endif %}
 						</div>
 						<span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
 					</div>
 					<div style="display:none;">
-						<span>{{ tool_summary(call.function.name, call.function.arguments) }}</span>
+						<span>{{ label }}</span>
 					</div>
 				</div>
+				{% endif %}
 				{% endfor %}
 			{% elif msg.type == "error" %}
 				<div class="error" onclick="toggleMessage(this)">
@@ -225,6 +244,7 @@
 
 <script>
 const SESSION_ID = "{{ session_id or '' }}";
+const NO_CONTENT_TOOLS = {{ NO_CONTENT_TOOLS|list|tojson }};
 document.addEventListener('DOMContentLoaded', function() {
     initializeChatView();
 });

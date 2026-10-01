@@ -126,8 +126,12 @@ nav {
 .reasoning {
 	border-radius: 4px;
 	font-style: italic;
-	font-size: 0.9rem;
+	font-size: 0.8rem;
 	color: var(--reasoning-text);
+}
+
+.message > * {
+	min-width: 0;
 }
 
 .tool {
@@ -135,9 +139,12 @@ nav {
 	border-radius: 4px;
 	font-size: 0.75rem;
 	background: var(--card-bg);
+	max-width: 100%;
+	overflow-x: auto;
 }
 
 .response {
+	font-size: 0.85rem;
 }
 
 .error {
@@ -157,6 +164,10 @@ nav {
 
 .prompt, .reasoning, .tool, .error, .response {
 	cursor: pointer;
+	}
+
+.tool.tool-static {
+	cursor: default;
 	}
 
 .message .content {

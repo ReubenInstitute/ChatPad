@@ -57,6 +57,9 @@ function toggleMessage(container) {
 
 const TOOLS_STORAGE_KEY = 'chatpad-enabled-tools';
 
+// fetch_url was split into get_url and download_url
+const LEGACY_TOOLS = { 'fetch_url': ['get_url', 'download_url'] };
+
 function toggleTool(el) {
 	const input = el.nextElementSibling;
 	const enabled = el.classList.toggle('enabled');
@@ -71,12 +74,19 @@ function restoreEnabledTools() {
 	} catch (e) {
 		enabled = [];
 	}
+	const current = Array.from(document.querySelectorAll('.tool-toggle')).map(el => el.dataset.name);
+	const wanted = new Set();
+	enabled.forEach(name => {
+		if (current.includes(name)) wanted.add(name);
+		(LEGACY_TOOLS[name] || []).forEach(newname => wanted.add(newname));
+	});
 	document.querySelectorAll('.tool-toggle').forEach(el => {
 		const input = el.nextElementSibling;
-		const on = enabled.includes(el.dataset.name);
+		const on = wanted.has(el.dataset.name);
 		el.classList.toggle('enabled', on);
 		input.disabled = !on;
 	});
+	saveEnabledTools();
 }
 
 function saveEnabledTools() {
@@ -183,6 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	restoreSystemModel();
 	initLiveChat();
 	initChatboxClearance();
+	initFollowStream();
 	lucide.createIcons();
 });
 
@@ -235,6 +246,20 @@ function short(text, n = 30) {
 	return text.length > n ? text.slice(0, n) + '...' : text;
 }
 
+function iconify(root) {
+	lucide.createIcons({ root });
+}
+
+function buildCopyIcon() {
+	const span = document.createElement('span');
+	span.className = 'copy-icon';
+	span.title = 'Copy';
+	span.innerHTML = '<i data-lucide="copy"></i>';
+	iconify(span);
+	span.onclick = function(e) { e.stopPropagation(); copyBlock(span); };
+	return span;
+}
+
 function buildBlock(className, expandedNode, collapsedText) {
 	const div = document.createElement('div');
 	div.className = className;
@@ -245,6 +270,7 @@ function buildBlock(className, expandedNode, collapsedText) {
 	expandedContent.className = 'content';
 	expandedContent.appendChild(expandedNode);
 	expandedWrap.appendChild(expandedContent);
+	expandedWrap.appendChild(buildCopyIcon());
 
 	const collapsedWrap = document.createElement('div');
 	collapsedWrap.style.display = 'none';
@@ -273,6 +299,7 @@ async function appendPromptBlock(turnDiv, record) {
 	expandedContent.appendChild(expandedTime);
 	expandedContent.appendChild(document.createTextNode(' ' + record.content));
 	expandedWrap.appendChild(expandedContent);
+	expandedWrap.appendChild(buildCopyIcon());
 
 	const collapsedWrap = document.createElement('div');
 	collapsedWrap.style.display = 'none';
@@ -296,6 +323,25 @@ async function appendPromptBlock(turnDiv, record) {
 		info.appendChild(small);
 		turnDiv.appendChild(info);
 	}
+
+	ensureMessageActions(turnDiv, record.session, record.uuid);
+}
+
+function ensureMessageActions(turnDiv, sessionId, uuid) {
+	let div = turnDiv.querySelector('.message-actions');
+	if (!div) {
+		div = document.createElement('div');
+		div.className = 'message-actions';
+		const hideIcon = document.createElement('span');
+		hideIcon.className = 'hide-icon';
+		hideIcon.title = 'Hide from history';
+		hideIcon.innerHTML = '<i data-lucide="eye-off"></i>';
+		hideIcon.onclick = function() { hideMessageTurn(hideIcon, sessionId, uuid); };
+		div.appendChild(hideIcon);
+		iconify(div);
+	}
+	turnDiv.appendChild(div);
+	return div;
 }
 
 function ensureLiveBlock(turnDiv, liveState, target) {
@@ -308,8 +354,26 @@ function ensureLiveBlock(turnDiv, liveState, target) {
 	turnDiv.appendChild(div);
 	const state = { div, content: div.children[0].querySelector('.content'), html: '' };
 	liveState[target] = state;
-	window.scrollTo(0, document.body.scrollHeight);
+	scrollIfAtBottom();
 	return state;
+}
+
+// Follow the stream only while the reader is at the bottom, so scrolling up to
+// read is never yanked back down by an incoming patch. The flag is driven by
+// real scroll events rather than measured at paint time, so content growing
+// cannot by itself push the reader out of the follow zone.
+let followStream = true;
+
+function initFollowStream() {
+	const update = () => {
+		followStream = document.body.scrollHeight - window.innerHeight - window.scrollY < 120;
+	};
+	window.addEventListener('scroll', update, { passive: true });
+	update();
+}
+
+function scrollIfAtBottom() {
+	if (followStream) window.scrollTo(0, document.body.scrollHeight);
 }
 
 function applyHtmlPatch(turnDiv, liveState, target, patchText) {
@@ -319,13 +383,21 @@ function applyHtmlPatch(turnDiv, liveState, target, patchText) {
 	const [newHtml] = dmp.patch_apply(patches, state.html);
 	state.html = newHtml;
 	state.content.innerHTML = newHtml;
-	window.scrollTo(0, document.body.scrollHeight);
+	scrollIfAtBottom();
 }
 
 function discardLiveBlock(liveState, target) {
 	const state = liveState && liveState[target];
 	if (state) {
 		state.div.remove();
+		liveState[target] = null;
+	}
+}
+
+function finalizeLiveBlock(liveState, target) {
+	const state = liveState && liveState[target];
+	if (state) {
+		state.div.children[1].querySelector('span').textContent = short(state.content.textContent);
 		liveState[target] = null;
 	}
 }
@@ -396,19 +468,31 @@ async function appendErrorBlock(turnDiv, record) {
 }
 
 function appendToolCallBlock(turnDiv, record, liveState) {
-	discardLiveBlock(liveState, 'response');
+	finalizeLiveBlock(liveState, 'response');
+	const labels = record.labels || {};
 	record.tool_calls.forEach(call => {
+		const label = labels[call.id] || `${call.function.name}(${call.function.arguments})`;
+
+		if (NO_CONTENT_TOOLS.includes(call.function.name)) {
+			const div = document.createElement('div');
+			div.className = 'tool tool-static';
+			const wrap = document.createElement('div');
+			const span = document.createElement('span');
+			span.textContent = label;
+			wrap.appendChild(span);
+			div.appendChild(wrap);
+			div.dataset.callId = call.id;
+			turnDiv.appendChild(div);
+			return;
+		}
+
 		const contentNode = document.createElement('div');
 		const summary = document.createElement('div');
 		summary.className = 'tool-summary';
-		summary.textContent = `${call.function.name}(${call.function.arguments})`;
-		const raw = document.createElement('div');
-		raw.className = 'tool-raw';
-		raw.textContent = `${call.function.name}(${call.function.arguments})`;
+		summary.textContent = label;
 		contentNode.appendChild(summary);
-		contentNode.appendChild(raw);
 
-		const div = buildBlock('tool', contentNode, `${call.function.name}(${call.function.arguments})`.slice(0, 30));
+		const div = buildBlock('tool', contentNode, label);
 		div.dataset.callId = call.id;
 		div.children[0].style.display = 'none';
 		div.children[1].style.display = 'block';
@@ -420,10 +504,20 @@ function appendToolResultBlock(turnDiv, record) {
 	const div = turnDiv.querySelector(`.tool[data-call-id="${CSS.escape(record.tool_call_id)}"]`);
 	if (!div) return;
 	if (record.error) div.classList.add('error');
+	const content = div.querySelector('.content');
+	if (!content) {
+		// no-content tool: the block has no expansion, so an error goes on its line
+		if (record.error) {
+			const line = div.children[0].querySelector('span');
+			if (line) line.textContent += ' ' + record.error.message;
+		}
+		return;
+	}
+	if (!record.content) return;   // blanked result: nothing to add
 	const raw = document.createElement('div');
 	raw.className = 'tool-raw';
 	raw.textContent = record.content;
-	div.children[0].querySelector('.content').appendChild(raw);
+	content.appendChild(raw);
 }
 
 function ensureMessagesContainer() {
@@ -464,6 +558,7 @@ async function handleBlock(turnDiv, record, liveState) {
 	if (record.type === 'prompt') await appendPromptBlock(turnDiv, record);
 	else if (record.type === 'html_patch') applyHtmlPatch(turnDiv, liveState, record.target, record.patch);
 	else if (record.type === 'discard_block') discardLiveBlock(liveState, record.target);
+	else if (record.type === 'finalize_block') finalizeLiveBlock(liveState, record.target);
 	else if (record.type === 'reasoning') await appendReasoningBlock(turnDiv, record, liveState);
 	else if (record.type === 'response' && record.content) await appendResponseBlock(turnDiv, record, liveState);
 	else if (record.type === 'error') await appendErrorBlock(turnDiv, record);
@@ -471,7 +566,9 @@ async function handleBlock(turnDiv, record, liveState) {
 	else if (record.type === 'tool_result') appendToolResultBlock(turnDiv, record);
 	else if (record.type === 'await_approval') appendApprovalControls(turnDiv);
 	else if (record.type === 'tool_stopped') appendToolStoppedBlock(turnDiv);
-	window.scrollTo(0, document.body.scrollHeight);
+	const actions = turnDiv.querySelector('.message-actions');
+	if (actions) turnDiv.appendChild(actions);
+	scrollIfAtBottom();
 }
 
 function appendApprovalControls(turnDiv) {
