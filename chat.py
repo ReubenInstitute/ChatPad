@@ -39,7 +39,7 @@ TODO_FILE = "todo.md"
 
 # tools whose result carries no content, so their block stays collapsed and
 # has nothing to expand to
-NO_CONTENT_TOOLS = {"rename_file", "copy_file", "delete_file", "make_folder", "remove_folder"}
+NO_CONTENT_TOOLS = {"rename_file", "copy_file", "delete_file", "make_folder", "remove_folder", "light_on", "light_off"}
 
 CALC_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow}
 CALC_NAMES = {"pi": math.pi, "e": math.e}
@@ -641,7 +641,14 @@ class Toolbox:
 					{"path": {"type": "string"}}, self.make_folder),
 			Tool("remove_folder", "Remove folder", "Remove an empty folder.",
 					{"path": {"type": "string"}}, self.remove_folder),
+			Tool("light_status", "Light status", "Get whether the light is currently on.",
+					{}, self.light_status),
+			Tool("light_on", "Light on", "Turn the light on.",
+					{}, self.light_on),
+			Tool("light_off", "Light off", "Turn the light off.",
+					{}, self.light_off),
 		]
+		self._light_state = False
 
 	def find(self, name):
 		return next((t for t in self.tools if t.name == name), None)
@@ -735,6 +742,17 @@ class Toolbox:
 	def remove_folder(self, path):
 		os.rmdir(self._resolve(path))
 		return f"removed folder {path}"
+
+	def light_status(self):
+		return "true" if self._light_state else "false"
+
+	def light_on(self):
+		self._light_state = True
+		return "light turned on"
+
+	def light_off(self):
+		self._light_state = False
+		return "light turned off"
 
 	def current_time(self):
 		return datetime.now().astimezone().strftime("%A %Y-%m-%d %H:%M:%S %Z (UTC%z)")
