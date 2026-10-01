@@ -1,12 +1,21 @@
 
 function copyBlock(button) {
 	const content = button.parentElement.querySelector('.content');
-	navigator.clipboard.writeText(content.textContent.trim());
+	const time = content.querySelector('.turn-time');
+	let text = content.textContent.trim();
+	if (time) text = text.replace(time.textContent, '').trim();
+	navigator.clipboard.writeText(text);
 }
 
-async function hideMessageTurn(button, sessionId, uuid) {
-	const message = button.closest('.message');
-	message.classList.toggle('message-hidden');
+async function toggleHideMessageTurn(icon, sessionId, uuid) {
+	const message = icon.closest('.message');
+	const nowHidden = message.classList.toggle('message-hidden');
+	icon.title = nowHidden ? 'Unhide' : 'Hide from history';
+	icon.innerHTML = '';
+	const i = document.createElement('i');
+	i.setAttribute('data-lucide', nowHidden ? 'eye' : 'eye-off');
+	icon.appendChild(i);
+	iconify();
 	await fetch(`/api/${sessionId}/hide/${uuid}`, { method: 'POST' });
 }
 
@@ -17,17 +26,14 @@ function initializeChatView() {
 
 	messages.forEach((message, i) => {
 		const isLast = i === messages.length - 1;
-		const selector = isLast ? '.tool' : '.prompt, .reasoning, .tool, .error, .response';
-
-		message.querySelectorAll(selector).forEach(container => {
-			const expandedDiv = container.children[0];
-			const collapsedDiv = container.children[1];
-
-			if (expandedDiv && collapsedDiv) {
-				expandedDiv.style.display = 'none';
-				collapsedDiv.style.display = 'block';
-			}
+		message.querySelectorAll('.content').forEach(content => {
+			content.classList.remove('expanded');
 		});
+		if (isLast) {
+			message.querySelectorAll('.prompt .content, .reasoning .content, .response .content').forEach(content => {
+				content.classList.add('expanded');
+			});
+		}
 	});
 
 	window.scrollTo(0, document.body.scrollHeight);
@@ -48,11 +54,10 @@ function initializeChatView() {
 
 function toggleMessage(container) {
 	if (window.getSelection().toString()) return;
-	const expanded = container.children[0];
-	const collapsed = container.children[1];
-	const isExpanded = expanded.style.display !== 'none';
-	expanded.style.display = isExpanded ? 'none' : 'block';
-	collapsed.style.display = isExpanded ? 'block' : 'none';
+	const content = container.querySelector('.content');
+	if (content) {
+		content.classList.toggle('expanded');
+	}
 }
 
 const TOOLS_STORAGE_KEY = 'chatpad-enabled-tools';
@@ -104,7 +109,7 @@ function toggleReasoning(el) {
 }
 
 function restoreReasoning() {
-	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	const el = document.querySelector('.opt-reasoning .emoji-toggle');
 	if (!el) return;
 	const input = el.nextElementSibling;
 	const saved = localStorage.getItem(REASONING_STORAGE_KEY);
@@ -114,7 +119,7 @@ function restoreReasoning() {
 }
 
 function saveReasoning() {
-	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	const el = document.querySelector('.opt-reasoning .emoji-toggle');
 	if (!el) return;
 	localStorage.setItem(REASONING_STORAGE_KEY, el.classList.contains('enabled'));
 }
@@ -146,7 +151,7 @@ function selectModel(el) {
 	document.querySelectorAll('#model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
 	document.getElementById('model-input').value = el.dataset.id;
-	document.getElementById('model-header').textContent = el.dataset.id;
+	document.getElementById('model-header').textContent = el.textContent;
 	document.getElementById('model-list').classList.add('collapsed');
 	saveSelectedModel();
 }
@@ -172,7 +177,7 @@ function toggleSystemModelList() {
 function selectSystemModel(el) {
 	document.querySelectorAll('#system-model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
-	document.getElementById('system-model-header').textContent = el.dataset.id || 'none';
+	document.getElementById('system-model-header').textContent = el.dataset.id ? el.textContent : 'none';
 	document.getElementById('system-model-header').classList.remove('hidden');
 	document.getElementById('system-model-list').classList.add('collapsed');
 	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
@@ -267,16 +272,15 @@ function buildBlock(className, expandedNode, collapsedText) {
 
 	const expandedWrap = document.createElement('div');
 	const expandedContent = document.createElement('div');
-	expandedContent.className = 'content';
+	expandedContent.className = 'content expanded';
 	expandedContent.appendChild(expandedNode);
 	expandedWrap.appendChild(expandedContent);
 	expandedWrap.appendChild(buildCopyIcon());
 
 	const collapsedWrap = document.createElement('div');
-	collapsedWrap.style.display = 'none';
-	const collapsedSpan = document.createElement('span');
-	collapsedSpan.textContent = collapsedText;
-	collapsedWrap.appendChild(collapsedSpan);
+	const collapsedText_ = document.createElement('span');
+	collapsedText_.textContent = collapsedText;
+	collapsedWrap.appendChild(collapsedText_);
 
 	div.appendChild(expandedWrap);
 	div.appendChild(collapsedWrap);
@@ -292,7 +296,7 @@ async function appendPromptBlock(turnDiv, record) {
 
 	const expandedWrap = document.createElement('div');
 	const expandedContent = document.createElement('div');
-	expandedContent.className = 'content';
+	expandedContent.className = 'content expanded';
 	const expandedTime = document.createElement('span');
 	expandedTime.className = 'turn-time';
 	expandedTime.textContent = time;
@@ -336,7 +340,7 @@ function ensureMessageActions(turnDiv, sessionId, uuid) {
 		hideIcon.className = 'hide-icon';
 		hideIcon.title = 'Hide from history';
 		hideIcon.innerHTML = '<i data-lucide="eye-off"></i>';
-		hideIcon.onclick = function() { hideMessageTurn(hideIcon, sessionId, uuid); };
+		hideIcon.onclick = function(e) { e.stopPropagation(); toggleHideMessageTurn(hideIcon, sessionId, uuid); };
 		div.appendChild(hideIcon);
 		iconify(div);
 	}
@@ -407,15 +411,12 @@ async function appendReasoningBlock(turnDiv, record, liveState) {
 	const live = liveState && liveState.reasoning;
 	if (live) {
 		live.content.innerHTML = html;
-		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
 		liveState.reasoning = null;
 		return;
 	}
 	const contentNode = document.createElement('div');
 	contentNode.innerHTML = html;
 	const div = buildBlock('reasoning', contentNode, short(contentNode.textContent));
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
 	turnDiv.appendChild(div);
 }
 
@@ -424,14 +425,11 @@ async function appendResponseBlock(turnDiv, record, liveState) {
 	const live = liveState && liveState.response;
 	if (live) {
 		live.content.innerHTML = html;
-		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
 		liveState.response = null;
 	} else {
 		const contentNode = document.createElement('div');
 		contentNode.innerHTML = html;
 		const div = buildBlock('response', contentNode, short(contentNode.textContent));
-		div.children[0].style.display = 'block';
-		div.children[1].style.display = 'none';
 		turnDiv.appendChild(div);
 	}
 
@@ -462,8 +460,8 @@ async function appendErrorBlock(turnDiv, record) {
 		contentNode.appendChild(small);
 	}
 	const div = buildBlock('error', contentNode, short(record.error.message));
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
+	div.children[0].style.display = 'none';
+	div.children[1].style.display = 'block';
 	turnDiv.appendChild(div);
 }
 
