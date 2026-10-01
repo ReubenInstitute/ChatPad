@@ -288,8 +288,7 @@ class Session:
 	def blocks(self):
 		return [b for m in self.messages for b in m.blocks]
 
-	@property
-	def history(self):
+	def history(self, think=False):
 		history = []
 		for message in self.messages:
 			if message.hidden:
@@ -298,16 +297,40 @@ class Session:
 			types = {b["type"] for b in blocks}
 			if "error" in types and not types & {"response", "tool_call"}:
 				continue  # the prompt got no answer, don't send it
+			# DeepSeek's thinking mode rejects any replayed assistant message that
+			# carries tool_calls unless it also carries the reasoning_content that
+			# produced them: "The `reasoning_content` in the thinking mode must be
+			# passed back to the API" (HTTP 400). Reasoning blocks share their turn
+			# uuid with the tool_call block, so the two can be paired up here.
+			reasoning_by_uuid = {b["uuid"]: b["content"] for b in blocks
+					if b["type"] == "reasoning" and b.get("content")}
 			entries = []
+			skip_round = False
 			for b in blocks:
 				t = b["type"]
 				if t == "prompt":
+					skip_round = False
 					entries.append({"role": "user", "content": b["content"]})
 				elif t == "tool_call":
-					entries.append({"role": "assistant", "content": b.get("content"), "tool_calls": b["tool_calls"]})
+					skip_round = False
+					reasoning = reasoning_by_uuid.get(b["uuid"]) if think else None
+					if think and not reasoning:
+						# The model called a tool without emitting any reasoning.
+						# There is nothing to pass back, so this round cannot be
+						# replayed in thinking mode. Drop the call together with
+						# its results: a tool result with no call is invalid too.
+						skip_round = True
+						continue
+					entry = {"role": "assistant", "content": b.get("content"), "tool_calls": b["tool_calls"]}
+					if reasoning:
+						entry["reasoning_content"] = reasoning
+					entries.append(entry)
 				elif t == "tool_result":
+					if skip_round:
+						continue
 					entries.append({"role": "tool", "tool_call_id": b["tool_call_id"], "content": b["content"]})
 				elif t == "response" and b.get("content"):
+					skip_round = False
 					entries.append({"role": "assistant", "content": b["content"]})
 			# A tool call whose follow-up reply came back empty never got closed
 			# out by a response or another tool call; drop that trailing,
@@ -435,7 +458,7 @@ class Message:
 				return {"type": "html_patch", "target": target,
 						"patch": dmp.patch_toText(dmp.patch_make(old_html, new_html)), "session": session_uuid}
 
-			for event in model.message(self.session.history, reasoning, active_tools):
+			for event in model.message(self.session.history(reasoning), reasoning, active_tools):
 				if "error" in event:
 					error = event["error"]
 					break

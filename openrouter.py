@@ -9,6 +9,47 @@ def api_key():
 		return f.read().strip()
 
 
+def http_error(response):
+	"""Return an {"error": ...} event if `response` is not a usable SSE stream.
+
+	An error body (4xx/5xx) is not SSE, so the parse loop below skips every one
+	of its lines and the provider falls through to yield a well-formed result
+	with no content. Downstream that is indistinguishable from the model
+	replying with nothing: no error block, no exception, no failed request. A
+	rejected request (bad history, rate limit, bad key) therefore looked like a
+	silent stall that repeated forever, because nothing could surface it.
+
+	Reads a bounded amount of the body so the provider's own diagnostic
+	survives, and returns None when the response is fine.
+	"""
+	if response.status_code == 200:
+		return None
+
+	raw = b""
+	try:
+		for chunk in response.iter_content(1024):
+			raw += chunk
+			if len(raw) >= 4096:
+				break
+	except Exception:
+		pass
+	response.close()
+
+	text = raw.decode("utf-8", "replace").strip()
+	try:
+		body = json.loads(text)
+	except Exception:
+		body = {}
+	if isinstance(body, dict):
+		body = body.get("error") or body
+	if not isinstance(body, dict):
+		body = {"message": str(body)}
+
+	message = body.get("message") or text[:500] or response.reason or "request failed"
+	return {"error": {"message": f"HTTP {response.status_code}: {message}",
+			"code": body.get("code") or response.status_code}}
+
+
 class Model:
 	def __init__(self, provider, id, free, **fields):
 		self.provider = provider
@@ -106,6 +147,12 @@ class OpenRouter:
 		if tools:
 			payload["tools"] = tools
 
+		# reasoning_content is DeepSeek's field for replaying thinking on tool
+		# calls. OpenRouter uses the `reasoning` field and a delta.reasoning
+		# stream, and a strict gateway may reject the unknown key, so drop it.
+		payload["messages"] = [{k: v for k, v in m.items() if k != "reasoning_content"}
+				for m in payload["messages"]]
+
 		content_parts = []
 		reasoning_parts = []
 		tool_calls = {}
@@ -114,6 +161,10 @@ class OpenRouter:
 
 		try:
 			response = requests.post(url, headers=headers, json=payload, timeout=(10, OpenRouter.timeout), stream=True)
+			failure = http_error(response)
+			if failure:
+				yield failure
+				return
 			deadline = time.monotonic() + OpenRouter.timeout
 			for raw_line in response.iter_lines():
 				if time.monotonic() > deadline:

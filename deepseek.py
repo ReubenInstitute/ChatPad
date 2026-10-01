@@ -3,7 +3,7 @@ import os
 import time
 import requests
 
-from openrouter import Model
+from openrouter import Model, http_error
 
 
 def api_key():
@@ -13,6 +13,11 @@ def api_key():
 
 class DeepSeek:
 	timeout = 120
+
+	# Thinking mode is stateful: reasoning from earlier assistant messages must
+	# be replayed as `reasoning_content`, otherwise every follow-up request is
+	# rejected with HTTP 400. See Session.history in chat.py.
+	requires_reasoning_content = True
 
 	def __init__(self):
 		self._cache = None
@@ -72,6 +77,10 @@ class DeepSeek:
 
 		try:
 			response = requests.post(url, headers=headers, json=payload, timeout=(10, DeepSeek.timeout), stream=True)
+			failure = http_error(response)
+			if failure:
+				yield failure
+				return
 			deadline = time.monotonic() + DeepSeek.timeout
 			for raw_line in response.iter_lines():
 				if time.monotonic() > deadline:

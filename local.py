@@ -5,7 +5,7 @@ import threading
 import time
 import requests
 
-from openrouter import Model
+from openrouter import Model, http_error
 
 ## Talks to a llama-server running on the same device (see localhost:8080).
 ## The provider is deliberately API-compatible with OpenRouter/DeepSeek so it
@@ -198,6 +198,10 @@ class Qwen:
 
 		try:
 			response = requests.post(url, json=payload, timeout=(10, Qwen.timeout), stream=True)
+			failure = http_error(response)
+			if failure:
+				yield failure
+				return
 			deadline = time.monotonic() + Qwen.timeout
 			for raw_line in response.iter_lines():
 				if time.monotonic() > deadline:
