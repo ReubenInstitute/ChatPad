@@ -298,16 +298,25 @@ class Session:
 			types = {b["type"] for b in blocks}
 			if "error" in types and not types & {"response", "tool_call"}:
 				continue  # the prompt got no answer, don't send it
+			entries = []
 			for b in blocks:
 				t = b["type"]
 				if t == "prompt":
-					history.append({"role": "user", "content": b["content"]})
+					entries.append({"role": "user", "content": b["content"]})
 				elif t == "tool_call":
-					history.append({"role": "assistant", "content": b.get("content"), "tool_calls": b["tool_calls"]})
+					entries.append({"role": "assistant", "content": b.get("content"), "tool_calls": b["tool_calls"]})
 				elif t == "tool_result":
-					history.append({"role": "tool", "tool_call_id": b["tool_call_id"], "content": b["content"]})
+					entries.append({"role": "tool", "tool_call_id": b["tool_call_id"], "content": b["content"]})
 				elif t == "response" and b.get("content"):
-					history.append({"role": "assistant", "content": b["content"]})
+					entries.append({"role": "assistant", "content": b["content"]})
+			# A tool call whose follow-up reply came back empty never got closed
+			# out by a response or another tool call; drop that trailing,
+			# unfinished round so it doesn't sit there unanswered forever.
+			while entries and entries[-1]["role"] == "tool":
+				entries.pop()
+			if entries and entries[-1]["role"] == "assistant" and entries[-1].get("tool_calls"):
+				entries.pop()
+			history.extend(entries)
 		return history
 
 
@@ -375,7 +384,7 @@ class Message:
 				i += 1
 			if run:
 				blocks.append({"type": "tool_call", "content": turn.response,
-						"tool_calls": [{"id": t.uuid, "function": {"name": t.tool, "arguments": t.arguments}} for t in run],
+						"tool_calls": [{"id": t.uuid, "type": "function", "function": {"name": t.tool, "arguments": t.arguments}} for t in run],
 						"labels": {t.uuid: tool_summary(t.tool, t.arguments) for t in run},
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
 				for t in run:
@@ -492,7 +501,7 @@ class Message:
 					tool_turn.save()
 
 				yield {"type": "tool_call", "content": turn.response,
-						"tool_calls": [{"id": t.uuid, "function": {"name": t.tool, "arguments": t.arguments}} for t in run_turns],
+						"tool_calls": [{"id": t.uuid, "type": "function", "function": {"name": t.tool, "arguments": t.arguments}} for t in run_turns],
 						"labels": {t.uuid: tool_summary(t.tool, t.arguments) for t in run_turns},
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
 
@@ -512,9 +521,8 @@ class Message:
 				continue
 
 			if not content_parts:
-				turn.error = {"message": f"Empty reply from model (finish_reason: {finish_reason})", "code": None}
 				turn.save()
-				yield {"type": "error", "error": turn.error, "model": model.id,
+				yield {"type": "end", "model": model.id,
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
 				return
 
