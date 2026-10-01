@@ -2,12 +2,24 @@ import os
 import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
-from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, NO_CONTENT_TOOLS, toggle_hidden, render_markdown, find_pending_tool_calls_flat
+from chat import Chat, Session, Turn, NO_CONTENT_TOOLS
 import re
 from rotate_keys import rotate
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 chat = Chat()
+
+
+def tool_summary(name, arguments=None):
+	tool = chat.toolbox.find(name)
+	return tool.label if tool else name
+
+
+def find_tool_result(turn, tool_call_id):
+	for m in turn:
+		if m.get("type") == "tool_result" and m.get("tool_call_id") == tool_call_id:
+			return m
+	return None
 
 BASE_DIR = "/sdcard"
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -89,17 +101,17 @@ app.jinja_env.globals['NO_CONTENT_TOOLS'] = NO_CONTENT_TOOLS
 
 @app.context_processor
 def inject_globals():
-	return {"TOOLS": TOOLS, "MODELS": chat.free_models}
+	return {"TOOLS": [t.schema for t in chat.toolbox.tools], "MODELS": chat.free_models}
 
 @app.template_filter('markdown')
 def markdown_filter(text):
-	return render_markdown(text)
+	return Turn.render_markdown(text)
 
 
 
 @app.route("/api/<session_id>/raw")
 def raw_view(session_id):
-    messages = get_session(session_id)
+    messages = Session(session_id).blocks
     if not messages:
         return "Session not found", 404
     text_parts = []
@@ -144,7 +156,7 @@ def index():
 
 @app.route('/archive')
 def archive():
-	sessions = group_sessions_by_day(list_sessions(archived=True))
+	sessions = chat.group_by_day(archived=True)
 	return render_template('archive.html', sessions=sessions)
 
 @app.route('/session/<session_id>')
@@ -155,10 +167,12 @@ def view_session_redirect(session_id):
 @app.route('/chat')
 @app.route('/chat/<session_id>')
 def chat_view(session_id=None):
-	sessions = group_sessions_by_day(list_sessions()) if session_id is None else None
-	messages = get_session(session_id) if session_id else []
+	sessions = chat.group_by_day() if session_id is None else None
+	session = Session(session_id) if session_id else None
+	messages = session.messages if session else []
+	blocks = [b for m in messages for b in m.blocks]
 	model_list = chat.free_models
-	default_model = next((m["model"] for m in reversed(messages) if m.get("model")), None)
+	default_model = next((b["model"] for b in reversed(blocks) if b.get("model")), None)
 	if default_model:
 		pass
 	elif model_list:
@@ -168,26 +182,26 @@ def chat_view(session_id=None):
 	return render_template('chat.html',
 						   session_id=session_id,
 						   sessions=sessions,
-						   archived=is_archived(session_id) if session_id else False,
-						   turns=group_turns(messages),
+						   archived=session.archived if session else False,
+						   turns=[m.blocks for m in messages],
 						   default_model=default_model,
 						   icons=model_icons(),
-						   pending_tool_calls=find_pending_tool_calls_flat(messages) if session_id else None)
+						   pending_tool_calls=messages[-1].pending if messages else None)
 
 @app.route('/api/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):
-	archive_session(session_id)
+	Session(session_id).archive()
 	return redirect('/chat')
 
 @app.route('/api/<session_id>/unarchive', methods=['POST'])
 def unarchive_session_route(session_id):
-	unarchive_session(session_id)
+	Session(session_id).unarchive()
 	return redirect(f'/chat/{session_id}')
 
 @app.route('/api/markdown', methods=['POST'])
 def api_markdown():
 	text = request.form.get('text', '')
-	return render_markdown(text)
+	return Turn.render_markdown(text)
 
 @app.route('/api/models')
 def api_models():
@@ -200,11 +214,11 @@ def api_models():
 
 @app.route('/api/sessions')
 def api_sessions():
-	return jsonify(list_sessions())
+	return jsonify(chat.list())
 
 @app.route('/api/<session_id>')
 def api_get_session(session_id):
-	return jsonify(get_session(session_id))
+	return jsonify(Session(session_id).blocks)
 
 @app.route('/api/message', methods=['POST'])
 @app.route('/api/<session_id>/message', methods=['POST'])
@@ -215,7 +229,7 @@ def api_message(session_id=None):
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
 	session = session_id or request.form.get('session')
-	for record in chat.session_message(prompt, model, reasoning, session, tools, mode):
+	for record in chat.message(prompt, model, reasoning, session, tools, mode):
 		session = record["session"]
 	return redirect(f'/chat/{session}')
 
@@ -226,7 +240,7 @@ def api_resume(session_id):
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
-	for record in chat.resume_tool_calls(session_id, action, model, reasoning, tools, mode):
+	for record in chat.resume(session_id, action, model, reasoning, tools, mode):
 		pass
 	return redirect(f'/chat/{session_id}')
 
@@ -238,13 +252,16 @@ def api_resume_blocks(session_id):
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
 	def generate():
-		for record in chat.resume_tool_calls(session_id, action, model, reasoning, tools, mode):
+		for record in chat.resume(session_id, action, model, reasoning, tools, mode):
 			yield f"data: {json.dumps(record)}\n\n"
 	return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/<session_id>/hide/<uuid>', methods=['POST'])
 def api_hide_message(session_id, uuid):
-	toggle_hidden(session_id, uuid)
+	session = Session(session_id)
+	message = next((m for m in session.messages if m.uuid == uuid), None)
+	if message:
+		message.unhide() if message.hidden else message.hide()
 	return ('', 204)
 
 @app.route('/api/blocks', methods=['POST'])
@@ -257,7 +274,7 @@ def api_blocks(session_id=None):
 	mode = request.form.get('mode', 'auto')
 	session = session_id or request.form.get('session')
 	def generate():
-		for record in chat.session_message(prompt, model, reasoning, session, tools, mode):
+		for record in chat.message(prompt, model, reasoning, session, tools, mode):
 			yield f"data: {json.dumps(record)}\n\n"
 	return Response(generate(), mimetype='text/event-stream')
 
