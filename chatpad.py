@@ -10,9 +10,43 @@ app = Flask(__name__, template_folder='.', static_folder='.')
 chat = Chat()
 
 
+TOOL_SUMMARY = {
+	"read_file": ("read", "path"),
+	"write_file": ("write", "path"),
+	"edit_file": ("edit", "path"),
+	"append_file": ("append", "path"),
+	"rename_file": ("rename", "path", "new_path"),
+	"copy_file": ("copy", "path", "new_path"),
+	"get_url": ("get", "url"),
+	"download_url": ("download", "url", "path"),
+	"delete_file": ("delete", "path"),
+	"current_time": ("current time",),
+	"calculator": ("calculate", "expression"),
+	"todo": ("todo",),
+	"run_python": ("run python",),
+	"run_command": ("run", "command"),
+	"make_folder": ("make folder", "path"),
+	"remove_folder": ("remove folder", "path"),
+	"light_status": ("light status",),
+	"light_on": ("turn light on",),
+	"light_off": ("turn light off",),
+}
+
+
 def tool_summary(name, arguments=None):
-	tool = chat.toolbox.find(name)
-	return tool.label if tool else name
+	spec = TOOL_SUMMARY.get(name)
+	if spec is None:
+		return name
+	verb, *keys = spec
+	if not keys:
+		return verb
+	try:
+		args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
+	except Exception:
+		args = {}
+	if len(keys) == 1:
+		return f"{verb} {args.get(keys[0], '?')}"
+	return f"{verb} {args.get(keys[0], '?')} to {args.get(keys[1], '?')}"
 
 
 def find_tool_result(turn, tool_call_id):
