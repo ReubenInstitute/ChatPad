@@ -278,7 +278,6 @@ function buildBlock(className, expandedNode, collapsedText) {
 	expandedWrap.appendChild(buildCopyIcon());
 
 	const collapsedWrap = document.createElement('div');
-	collapsedWrap.style.display = 'none';
 	const collapsedText_ = document.createElement('span');
 	collapsedText_.textContent = collapsedText;
 	collapsedWrap.appendChild(collapsedText_);
@@ -354,6 +353,8 @@ function ensureLiveBlock(turnDiv, liveState, target) {
 	const className = target === 'reasoning' ? 'reasoning' : 'response';
 	const contentNode = document.createElement('div');
 	const div = buildBlock(className, contentNode, '');
+	div.children[0].style.display = 'block';
+	div.children[1].style.display = 'none';
 	turnDiv.appendChild(div);
 	const state = { div, content: div.children[0].querySelector('.content'), html: '' };
 	liveState[target] = state;
@@ -459,6 +460,8 @@ async function appendErrorBlock(turnDiv, record) {
 		contentNode.appendChild(small);
 	}
 	const div = buildBlock('error', contentNode, short(record.error.message));
+	div.children[0].style.display = 'none';
+	div.children[1].style.display = 'block';
 	turnDiv.appendChild(div);
 }
 
@@ -489,6 +492,8 @@ function appendToolCallBlock(turnDiv, record, liveState) {
 
 		const div = buildBlock('tool', contentNode, label);
 		div.dataset.callId = call.id;
+		div.children[0].style.display = 'none';
+		div.children[1].style.display = 'block';
 		turnDiv.appendChild(div);
 	});
 }
