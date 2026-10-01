@@ -533,16 +533,25 @@ function ensureMessagesContainer() {
 
 function buildArchiveForm(sessionId) {
 	const container = document.getElementById('archive-controls');
-	if (!container || container.querySelector('form')) return;
-	const form = document.createElement('form');
-	form.className = 'chatbox-clearance';
-	form.action = `/api/${sessionId}/archive`;
-	form.method = 'post';
-	const button = document.createElement('button');
-	button.type = 'submit';
-	button.textContent = 'Archive';
-	form.appendChild(button);
-	container.appendChild(form);
+	if (!container) return;
+	if (!container.querySelector('form')) {
+		const form = document.createElement('form');
+		form.className = 'chatbox-clearance';
+		form.action = `/api/${sessionId}/archive`;
+		form.method = 'post';
+		const button = document.createElement('button');
+		button.type = 'submit';
+		button.textContent = 'Archive';
+		form.appendChild(button);
+		container.appendChild(form);
+	}
+	if (!container.querySelector('.session-raw-link')) {
+		const rawLink = document.createElement('a');
+		rawLink.className = 'session-raw-link';
+		rawLink.href = `/api/${sessionId}/raw`;
+		rawLink.textContent = 'raw';
+		container.appendChild(rawLink);
+	}
 }
 
 function promoteToSession(sessionId) {

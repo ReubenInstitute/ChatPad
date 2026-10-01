@@ -242,6 +242,16 @@ nav {
 	justify-content: flex-end;
 	}
 
+#archive-controls {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	}
+
+#archive-controls form {
+	margin: 0;
+	}
+
 .approval-controls button {
 	margin: 0;
 	padding: 6px 14px;
@@ -547,12 +557,14 @@ td.cap {
 	}
 
 .session-raw-link {
-	margin-left: 10px;
-	padding: 2px 8px;
+	display: inline-block;
+	box-sizing: border-box;
+	padding: 8px 16px;
+	margin: 10px 0;
 	border-radius: 4px;
 	background: var(--link);
 	color: #ffffff;
-	font-size: 0.75rem;
+	font-size: 0.9rem;
 	text-decoration: none;
 	}
 
