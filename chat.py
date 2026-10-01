@@ -41,6 +41,44 @@ TODO_FILE = "todo.md"
 # has nothing to expand to
 NO_CONTENT_TOOLS = {"rename_file", "copy_file", "delete_file", "make_folder", "remove_folder", "light_on", "light_off"}
 
+TOOL_SUMMARY = {
+	"read_file": ("read", "path"),
+	"write_file": ("write", "path"),
+	"edit_file": ("edit", "path"),
+	"append_file": ("append", "path"),
+	"rename_file": ("rename", "path", "new_path"),
+	"copy_file": ("copy", "path", "new_path"),
+	"get_url": ("get", "url"),
+	"download_url": ("download", "url", "path"),
+	"delete_file": ("delete", "path"),
+	"current_time": ("current time",),
+	"calculator": ("calculate", "expression"),
+	"todo": ("todo",),
+	"run_python": ("run python",),
+	"run_command": ("run", "command"),
+	"make_folder": ("make folder", "path"),
+	"remove_folder": ("remove folder", "path"),
+	"light_status": ("light status",),
+	"light_on": ("turn light on",),
+	"light_off": ("turn light off",),
+}
+
+
+def tool_summary(name, arguments=None):
+	spec = TOOL_SUMMARY.get(name)
+	if spec is None:
+		return name
+	verb, *keys = spec
+	if not keys:
+		return verb
+	try:
+		args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
+	except Exception:
+		args = {}
+	if len(keys) == 1:
+		return f"{verb} {args.get(keys[0], '?')}"
+	return f"{verb} {args.get(keys[0], '?')} to {args.get(keys[1], '?')}"
+
 CALC_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow}
 CALC_NAMES = {"pi": math.pi, "e": math.e}
 CALC_FUNCS = {n: getattr(math, n) for n in ("sqrt", "sin", "cos", "tan", "log", "log10", "exp", "floor", "ceil")}
@@ -338,6 +376,7 @@ class Message:
 			if run:
 				blocks.append({"type": "tool_call", "content": turn.response,
 						"tool_calls": [{"id": t.uuid, "function": {"name": t.tool, "arguments": t.arguments}} for t in run],
+						"labels": {t.uuid: tool_summary(t.tool, t.arguments) for t in run},
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
 				for t in run:
 					blocks.append({"type": "tool_result", "tool_call_id": t.uuid, "name": t.tool,
@@ -454,6 +493,7 @@ class Message:
 
 				yield {"type": "tool_call", "content": turn.response,
 						"tool_calls": [{"id": t.uuid, "function": {"name": t.tool, "arguments": t.arguments}} for t in run_turns],
+						"labels": {t.uuid: tool_summary(t.tool, t.arguments) for t in run_turns},
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
 
 				if mode == "manual":
