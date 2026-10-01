@@ -225,6 +225,31 @@ nav {
 	opacity: 1;
 	}
 
+.approval-controls {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	}
+
+.approval-controls button {
+	margin: 0;
+	padding: 6px 14px;
+	font-size: 0.85rem;
+	}
+
+.approval-controls button[data-action="deny"], .approval-controls button[data-action="stop"] {
+	background: var(--error-bg);
+	}
+
+.tool-stopped {
+	padding: 5px 10px;
+	border-radius: 4px;
+	font-size: 0.75rem;
+	font-style: italic;
+	color: var(--description-text);
+	background: var(--card-bg);
+	}
+
 
 .chatbox {
 	background: var(--card-bg);
@@ -315,13 +340,14 @@ button {
 	align-items: start;
 	}
 
-.chatbox .opt-reasoning, .chatbox .opt-models, .chatbox .opt-tools, .chatbox .opt-refresh-models {
+.chatbox .opt-reasoning, .chatbox .opt-mode, .chatbox .opt-models, .chatbox .opt-tools, .chatbox .opt-refresh-models {
 	font-size: 0.8rem;
 	color: #999999;
 	}
 
-.chatbox .opt-reasoning, .chatbox .opt-tools, .chatbox .opt-refresh-models {
-	flex: 0 0 auto;
+.chatbox .opt-top-row {
+	display: flex;
+	gap: 12px;
 	}
 
 .chatbox .opt-models {
@@ -402,6 +428,18 @@ button {
 
 .emoji-toggle.enabled {
 	opacity: 1;
+	}
+
+.mode-toggle .icon-manual {
+	display: none;
+	}
+
+.mode-toggle.enabled .icon-auto {
+	display: none;
+	}
+
+.mode-toggle.enabled .icon-manual {
+	display: inline;
 	}
 
 .chatbox select {

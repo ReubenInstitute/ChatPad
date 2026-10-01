@@ -179,11 +179,38 @@ document.addEventListener('DOMContentLoaded', function() {
 	restoreEnabledTools();
 	restoreSelectedModel();
 	restoreReasoning();
+	restoreMode();
 	restoreSystemModel();
 	initLiveChat();
 	initChatboxClearance();
 	lucide.createIcons();
 });
+
+const MODE_STORAGE_KEY = 'chatpad-mode';
+
+function setMode(el, mode) {
+	el.dataset.mode = mode;
+	el.classList.toggle('enabled', mode === 'manual');
+	el.title = mode === 'manual' ? 'Manual: approve each tool call' : 'Auto: tools run without approval';
+	document.getElementById('mode-input').value = mode;
+}
+
+function toggleMode(el) {
+	setMode(el, el.dataset.mode === 'manual' ? 'auto' : 'manual');
+	saveMode();
+}
+
+function restoreMode() {
+	const el = document.getElementById('mode-toggle');
+	if (!el) return;
+	setMode(el, localStorage.getItem(MODE_STORAGE_KEY) || 'auto');
+}
+
+function saveMode() {
+	const el = document.getElementById('mode-toggle');
+	if (!el) return;
+	localStorage.setItem(MODE_STORAGE_KEY, el.dataset.mode);
+}
 
 function initChatboxClearance() {
 	const bar = document.querySelector('.chatbox-bar');
@@ -442,7 +469,72 @@ async function handleBlock(turnDiv, record, liveState) {
 	else if (record.type === 'error') await appendErrorBlock(turnDiv, record);
 	else if (record.type === 'tool_call') appendToolCallBlock(turnDiv, record, liveState);
 	else if (record.type === 'tool_result') appendToolResultBlock(turnDiv, record);
+	else if (record.type === 'await_approval') appendApprovalControls(turnDiv);
+	else if (record.type === 'tool_stopped') appendToolStoppedBlock(turnDiv);
 	window.scrollTo(0, document.body.scrollHeight);
+}
+
+function appendApprovalControls(turnDiv) {
+	const div = document.createElement('div');
+	div.className = 'approval-controls';
+	['approve', 'deny', 'stop'].forEach(action => {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.dataset.action = action;
+		button.textContent = action[0].toUpperCase() + action.slice(1);
+		button.onclick = () => resumeToolCalls(action, button);
+		div.appendChild(button);
+	});
+	turnDiv.appendChild(div);
+}
+
+function appendToolStoppedBlock(turnDiv) {
+	const div = document.createElement('div');
+	div.className = 'tool-stopped';
+	div.textContent = 'Stopped';
+	turnDiv.appendChild(div);
+}
+
+function lastFormValues() {
+	const form = document.getElementById('chat-form');
+	return new FormData(form);
+}
+
+async function consumeBlockStream(response, turnDiv, liveState) {
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = '';
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		buffer += decoder.decode(value, { stream: true });
+		const parts = buffer.split('\n\n');
+		buffer = parts.pop();
+		for (const part of parts) {
+			if (!part.startsWith('data: ')) continue;
+			const record = JSON.parse(part.slice(6));
+			await handleBlock(turnDiv, record, liveState);
+		}
+	}
+}
+
+async function resumeToolCalls(action, button) {
+	const controlsDiv = button.closest('.approval-controls');
+	const turnDiv = controlsDiv.closest('.message');
+	controlsDiv.remove();
+
+	const formValues = lastFormValues();
+	const resumeData = new FormData();
+	resumeData.set('action', action);
+	resumeData.set('model', formValues.get('model'));
+	if (formValues.get('reasoning') !== null) resumeData.set('reasoning', '1');
+	formValues.getAll('tools').forEach(t => resumeData.append('tools', t));
+	resumeData.set('mode', formValues.get('mode') || 'auto');
+
+	if (!liveSessionId) liveSessionId = SESSION_ID;
+	const liveState = { reasoning: null, response: null };
+	const response = await fetch(`/api/${liveSessionId}/resume-blocks`, { method: 'POST', body: resumeData });
+	await consumeBlockStream(response, turnDiv, liveState);
 }
 
 let liveSessionId = null;
@@ -465,21 +557,7 @@ async function submitLiveChat(event) {
 	const url = liveSessionId ? `/api/${liveSessionId}/blocks` : '/api/blocks';
 	try {
 		const response = await fetch(url, { method: 'POST', body: formData });
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			buffer += decoder.decode(value, { stream: true });
-			const parts = buffer.split('\n\n');
-			buffer = parts.pop();
-			for (const part of parts) {
-				if (!part.startsWith('data: ')) continue;
-				const record = JSON.parse(part.slice(6));
-				await handleBlock(turnDiv, record, liveState);
-			}
-		}
+		await consumeBlockStream(response, turnDiv, liveState);
 	} finally {
 		button.disabled = false;
 	}
@@ -491,4 +569,11 @@ function initLiveChat() {
 	const form = document.getElementById('chat-form');
 	if (!form) return;
 	form.addEventListener('submit', submitLiveChat);
+
+	const pendingControls = document.getElementById('approval-controls');
+	if (pendingControls) {
+		pendingControls.querySelectorAll('button').forEach(btn => {
+			btn.onclick = () => resumeToolCalls(btn.dataset.action, btn);
+		});
+	}
 }

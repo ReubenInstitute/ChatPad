@@ -21,6 +21,7 @@ from diff_match_patch import diff_match_patch
 
 from openrouter import OpenRouter
 from deepseek import DeepSeek
+from local import Qwen
 
 MARKDOWN_EXTENSIONS = ['tables', 'fenced_code', 'codehilite', 'nl2br']
 
@@ -40,6 +41,7 @@ class Chat:
 	def __init__(self):
 		self.openrouter = OpenRouter()
 		self.deepseek = DeepSeek()
+		self.local = Qwen()
 
 	@property
 	def sessions(self):
@@ -55,11 +57,11 @@ class Chat:
 
 	@property
 	def models(self):
-		return self.openrouter.models + self.deepseek.models
+		return self.openrouter.models + self.deepseek.models + self.local.models
 
 	@property
 	def free_models(self):
-		return self.openrouter.free_models + self.deepseek.free_models
+		return self.openrouter.free_models + self.deepseek.free_models + self.local.free_models
 
 	def resolve_model(self, model_id):
 		for m in self.models:
@@ -67,7 +69,7 @@ class Chat:
 				return m
 		raise ValueError(f"unknown model: {model_id}")
 
-	def session_message(self, prompt, model, reasoning=True, session=None, tools=None):
+	def session_message(self, prompt, model, reasoning=True, session=None, tools=None, mode="auto"):
 		if session is None:
 			session = str(uuid7.create(datetime.now(timezone.utc)))
 
@@ -76,88 +78,141 @@ class Chat:
 		model = self.resolve_model(model)
 
 		existing = read_session_messages(session)
-
-		def add(record):
-			name = next_name(existing[-1][0] if existing else None)
-			record["session"] = session
-			record["uuid"] = name[:-5]
-			existing.append((name, record))
-			write_session_messages(session, existing)
-			return record
+		add = _make_adder(session, existing)
 
 		yield add({"type": "prompt", "content": prompt, "model": model.id})
-		for step in range(MAX_STEPS):
-			reasoning_parts = []
-			content_parts = []
-			reasoning_html = ""
-			content_html = ""
-			tool_calls = None
-			finish_reason = None
-			usage = {}
-			error = None
-			dmp = diff_match_patch()
+		yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
 
-			for event in model.message(build_messages(existing), reasoning, active_tools):
-				if "error" in event:
-					error = event["error"]
-					break
-				kind = event.get("delta")
-				if kind == "reasoning":
-					reasoning_parts.append(event["text"])
-					new_html = render_markdown("".join(reasoning_parts))
-					patches = dmp.patch_make(reasoning_html, new_html)
-					if patches:
-						reasoning_html = new_html
-						yield {"type": "html_patch", "target": "reasoning", "patch": dmp.patch_toText(patches), "session": session}
-				elif kind == "content":
-					content_parts.append(event["text"])
-					new_html = render_markdown("".join(content_parts))
-					patches = dmp.patch_make(content_html, new_html)
-					if patches:
-						content_html = new_html
-						yield {"type": "html_patch", "target": "response", "patch": dmp.patch_toText(patches), "session": session}
-				elif "result" in event:
-					result = event["result"]
-					message = result["choices"][0]["message"]
-					finish_reason = result["choices"][0].get("finish_reason")
-					usage = result.get("usage") or {}
-					tool_calls = message.get("tool_calls")
+	def resume_tool_calls(self, session, action, model, reasoning=True, tools=None, mode="auto"):
+		active_tools = [t for t in TOOLS if t["function"]["name"] in tools] if tools is not None else []
+		model = self.resolve_model(model)
 
-			if error:
-				if reasoning_parts:
-					yield {"type": "discard_block", "target": "reasoning", "session": session}
-				if content_parts:
-					yield {"type": "discard_block", "target": "response", "session": session}
-				yield add({"type": "error", "error": error, "model": model.id})
-				return
+		existing = read_session_messages(session)
+		add = _make_adder(session, existing)
 
-			if reasoning_parts:
-				yield add({"type": "reasoning", "content": "".join(reasoning_parts)})
-
-			if tool_calls:
-				for call in tool_calls:
-					try:
-						json.loads(call["function"]["arguments"])
-					except Exception:
-						call["function"]["arguments"] = "{}"
-				if content_parts:
-					yield {"type": "discard_block", "target": "response", "session": session}
-				yield add({"type": "tool_call", "content": "".join(content_parts) or None, "tool_calls": tool_calls})
-				for call in tool_calls:
-					output, tool_error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
-					record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
-					if tool_error:
-						record["error"] = {"message": tool_error}
-					yield add(record)
-				continue
-
-			if not content_parts:
-				yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {finish_reason})", "code": None}, "model": model.id})
-				return
-
-			yield add({"type": "response", "content": "".join(content_parts), "model": model.id, "cost": usage.get("cost"), "usage": usage})
+		pending = find_pending_tool_calls(existing)
+		if not pending:
 			return
-		yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model.id})
+
+		if action == "stop":
+			yield add({"type": "tool_stopped"})
+			return
+
+		for call in pending:
+			if action == "deny":
+				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": "User denied this tool call.", "denied": True}
+			else:
+				output, tool_error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
+				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
+				if tool_error:
+					record["error"] = {"message": tool_error}
+			yield add(record)
+
+		yield from _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode)
+
+
+def _make_adder(session, existing):
+	def add(record):
+		name = next_name(existing[-1][0] if existing else None)
+		record["session"] = session
+		record["uuid"] = name[:-5]
+		existing.append((name, record))
+		write_session_messages(session, existing)
+		return record
+	return add
+
+
+def find_pending_tool_calls(existing):
+	return find_pending_tool_calls_flat([r for _, r in existing])
+
+
+def find_pending_tool_calls_flat(records):
+	if not records:
+		return None
+	last_record = records[-1]
+	if last_record.get("type") != "tool_call":
+		return None
+	have_results = {r.get("tool_call_id") for r in records if r.get("type") == "tool_result"}
+	pending = [c for c in (last_record.get("tool_calls") or []) if c["id"] not in have_results]
+	return pending or None
+
+
+def _run_steps(session, existing, model, reasoning, active_tools, tools, add, mode):
+	for step in range(MAX_STEPS):
+		reasoning_parts = []
+		content_parts = []
+		reasoning_html = ""
+		content_html = ""
+		tool_calls = None
+		finish_reason = None
+		usage = {}
+		error = None
+		dmp = diff_match_patch()
+
+		for event in model.message(build_messages(existing), reasoning, active_tools):
+			if "error" in event:
+				error = event["error"]
+				break
+			kind = event.get("delta")
+			if kind == "reasoning":
+				reasoning_parts.append(event["text"])
+				new_html = render_markdown("".join(reasoning_parts))
+				patches = dmp.patch_make(reasoning_html, new_html)
+				if patches:
+					reasoning_html = new_html
+					yield {"type": "html_patch", "target": "reasoning", "patch": dmp.patch_toText(patches), "session": session}
+			elif kind == "content":
+				content_parts.append(event["text"])
+				new_html = render_markdown("".join(content_parts))
+				patches = dmp.patch_make(content_html, new_html)
+				if patches:
+					content_html = new_html
+					yield {"type": "html_patch", "target": "response", "patch": dmp.patch_toText(patches), "session": session}
+			elif "result" in event:
+				result = event["result"]
+				message = result["choices"][0]["message"]
+				finish_reason = result["choices"][0].get("finish_reason")
+				usage = result.get("usage") or {}
+				tool_calls = message.get("tool_calls")
+
+		if error:
+			if reasoning_parts:
+				yield {"type": "discard_block", "target": "reasoning", "session": session}
+			if content_parts:
+				yield {"type": "discard_block", "target": "response", "session": session}
+			yield add({"type": "error", "error": error, "model": model.id})
+			return
+
+		if reasoning_parts:
+			yield add({"type": "reasoning", "content": "".join(reasoning_parts)})
+
+		if tool_calls:
+			for call in tool_calls:
+				try:
+					json.loads(call["function"]["arguments"])
+				except Exception:
+					call["function"]["arguments"] = "{}"
+			if content_parts:
+				yield {"type": "discard_block", "target": "response", "session": session}
+			yield add({"type": "tool_call", "content": "".join(content_parts) or None, "tool_calls": tool_calls})
+			if mode == "manual":
+				yield {"type": "await_approval", "session": session}
+				return
+			for call in tool_calls:
+				output, tool_error = run_tool(call["function"]["name"], call["function"]["arguments"], tools or [])
+				record = {"type": "tool_result", "tool_call_id": call["id"], "name": call["function"]["name"], "content": output}
+				if tool_error:
+					record["error"] = {"message": tool_error}
+				yield add(record)
+			continue
+
+		if not content_parts:
+			yield add({"type": "error", "error": {"message": f"Empty reply from model (finish_reason: {finish_reason})", "code": None}, "model": model.id})
+			return
+
+		yield add({"type": "response", "content": "".join(content_parts), "model": model.id, "cost": usage.get("cost"), "usage": usage})
+		return
+	yield add({"type": "error", "error": {"message": f"Stopped after {MAX_STEPS} steps", "code": None}, "model": model.id})
 
 class Session:
 	def __init__(self, uuid=None):
@@ -424,7 +479,7 @@ class ToolError(Exception):
 
 
 def _resolve(name):
-	name = os.path.expanduser(name).lstrip("/")
+	name = name.lstrip("~").lstrip("/")
 	if name in ("", "."):
 		return SYSTEM_DIR
 	return os.path.normpath(os.path.join(SYSTEM_DIR, name))

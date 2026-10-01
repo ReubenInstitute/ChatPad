@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
-from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden, render_markdown
+from chat import Chat, list_sessions, group_sessions_by_day, get_session, group_turns, archive_session, unarchive_session, is_archived, tool_summary, find_tool_result, TOOLS, toggle_hidden, render_markdown, find_pending_tool_calls_flat
 import re
 from rotate_keys import rotate
 
@@ -170,7 +170,8 @@ def chat_view(session_id=None):
 						   archived=is_archived(session_id) if session_id else False,
 						   turns=group_turns(messages),
 						   default_model=default_model,
-						   icons=model_icons())
+						   icons=model_icons(),
+						   pending_tool_calls=find_pending_tool_calls_flat(messages) if session_id else None)
 
 @app.route('/api/<session_id>/archive', methods=['POST'])
 def archive_session_route(session_id):
@@ -211,10 +212,34 @@ def api_message(session_id=None):
 	model = request.form.get('model')
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
 	session = session_id or request.form.get('session')
-	for record in chat.session_message(prompt, model, reasoning, session, tools):
+	for record in chat.session_message(prompt, model, reasoning, session, tools, mode):
 		session = record["session"]
 	return redirect(f'/chat/{session}')
+
+@app.route('/api/<session_id>/resume', methods=['POST'])
+def api_resume(session_id):
+	action = request.form.get('action')
+	model = request.form.get('model')
+	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
+	for record in chat.resume_tool_calls(session_id, action, model, reasoning, tools, mode):
+		pass
+	return redirect(f'/chat/{session_id}')
+
+@app.route('/api/<session_id>/resume-blocks', methods=['POST'])
+def api_resume_blocks(session_id):
+	action = request.form.get('action')
+	model = request.form.get('model')
+	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
+	def generate():
+		for record in chat.resume_tool_calls(session_id, action, model, reasoning, tools, mode):
+			yield f"data: {json.dumps(record)}\n\n"
+	return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/<session_id>/hide/<uuid>', methods=['POST'])
 def api_hide_message(session_id, uuid):
@@ -228,9 +253,10 @@ def api_blocks(session_id=None):
 	model = request.form.get('model')
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
 	session = session_id or request.form.get('session')
 	def generate():
-		for record in chat.session_message(prompt, model, reasoning, session, tools):
+		for record in chat.session_message(prompt, model, reasoning, session, tools, mode):
 			yield f"data: {json.dumps(record)}\n\n"
 	return Response(generate(), mimetype='text/event-stream')
 
@@ -246,6 +272,7 @@ def rotate_keys():
 def refresh_models_route():
 	chat.openrouter.load_models()
 	chat.deepseek.load_models()
+	chat.local.load_models()
 	return '', 204
 
 
@@ -267,6 +294,7 @@ if __name__ == "__main__":
 	if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
 		chat.openrouter.load_models()
 		chat.deepseek.load_models()
+		chat.local.load_models()
 	# Disable reloader to prevent restart on file changes
 	# Set FLASK_DEBUG=1 to enable debug mode without reloader, or FLASK_RUN_RELOAD=1 to enable reloader
 	use_reloader = os.environ.get("FLASK_RUN_RELOAD", "0") == "1"

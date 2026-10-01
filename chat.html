@@ -109,6 +109,8 @@
 					</small>
 				</div>
 				{% endif %}
+			{% elif msg.type == "tool_stopped" %}
+				<div class="tool-stopped">Stopped</div>
 			{% endif %}
 			{% endfor %}
 			<div class="message-actions">
@@ -116,6 +118,13 @@
 			</div>
 		</div>
 	{% endfor %}
+	{% if pending_tool_calls %}
+		<div class="approval-controls" id="approval-controls">
+			<button type="button" data-action="approve" onclick="resumeToolCalls('approve', this)">Approve</button>
+			<button type="button" data-action="deny" onclick="resumeToolCalls('deny', this)">Deny</button>
+			<button type="button" data-action="stop" onclick="resumeToolCalls('stop', this)">Stop</button>
+		</div>
+	{% endif %}
 	</div>
 {% endif %}
 
@@ -150,9 +159,16 @@
 
 	<div class="chatbox chatbox-fixed">
 	<form id="chat-form" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
-		<div class="opt-reasoning">
-			<div class="tool-toggle emoji-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
-			<input type="hidden" name="reasoning" value="1">
+		<div class="opt-top-row">
+			<div class="opt-reasoning">
+				<div class="tool-toggle emoji-toggle enabled" data-name="reasoning" onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
+				<input type="hidden" name="reasoning" value="1">
+			</div>
+
+			<div class="opt-mode">
+				<div class="mode-toggle emoji-toggle" id="mode-toggle" data-mode="auto" onclick="toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="zap" class="icon-auto"></i><i data-lucide="shield-check" class="icon-manual"></i></div>
+				<input type="hidden" name="mode" id="mode-input" value="auto">
+			</div>
 		</div>
 
 		<div class="input-row">
