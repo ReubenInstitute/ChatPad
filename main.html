@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Main{% endblock %}
+
+{% block content %}
+<div id="count"></div>
+<div id="messages"></div>
+<div id="prompt"></div>
+<script>
+	const app = new App()
+	app.load().then(() => {
+		document.getElementById("count").textContent = app.sessions.length
+		app.id = app.sessions.map(s => s.uuid).sort().pop()
+		return app.load()
+	}).then(() => {
+		const messages = app.session.messages
+		document.getElementById("messages").textContent = messages.length
+		document.getElementById("prompt").textContent = messages[0].turns[0].prompt
+	})
+</script>
+{% endblock %}

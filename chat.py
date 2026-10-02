@@ -156,7 +156,7 @@ class Chat:
 				"timestamp": turn.timestamp, "session": session}
 		turn.save()
 
-		yield from msg.run(model_obj, reasoning, active_tools, tools, mode, self.toolbox)
+		yield from msg.run(model_obj, reasoning, active_tools, tools, mode, self.toolbox, turn)
 
 	def resume(self, session_id, action, model, reasoning=True, tools=None, mode="auto"):
 		session_obj = Session(uuid=session_id)
@@ -438,11 +438,12 @@ class Message:
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
 		return blocks
 
-	def run(self, model, reasoning, active_tools, tool_names, mode, toolbox):
+	def run(self, model, reasoning, active_tools, tool_names, mode, toolbox, turn=None):
 		session_uuid = self.session.uuid
 		for step in range(MAX_STEPS):
-			turn = MessageTurn(message=self, uuid=self.next_uuid(), model=model.id, think=reasoning)
-			self.turns.append(turn)
+			if turn is None:
+				turn = MessageTurn(message=self, uuid=self.next_uuid(), model=model.id, think=reasoning)
+				self.turns.append(turn)
 			reasoning_parts = []
 			content_parts = []
 			reasoning_html = ""
@@ -569,6 +570,7 @@ class Message:
 					yield {"type": "tool_result", "tool_call_id": tool_turn.uuid, "name": tool_turn.tool,
 							"content": tool_turn.result, "error": tool_turn.error,
 							"uuid": tool_turn.uuid, "timestamp": tool_turn.timestamp, "session": session_uuid}
+				turn = None
 				continue
 
 			if not content_parts:
@@ -578,7 +580,12 @@ class Message:
 				return
 
 			turn.response = "".join(content_parts)
-			turn.raw = {"usage": usage}
+			raw = json.loads(json.dumps(result))
+			raw_message = raw["choices"][0]["message"]
+			for key in ("content", "reasoning", "reasoning_content"):
+				if isinstance(raw_message.get(key), str):
+					raw_message[key] = ""
+			turn.raw = raw
 			self.input_tokens = usage.get("prompt_tokens")
 			self.output_tokens = usage.get("completion_tokens")
 			turn.save()

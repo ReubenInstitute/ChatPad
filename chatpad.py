@@ -197,8 +197,8 @@ def models_view():
 	return render_template('models.html', models=chat.models, icons=model_icons())
 
 @app.route('/')
-def index():
-	return redirect('/chat')
+def main():
+	return render_template('main.html')
 
 @app.route('/archive')
 def archive():
@@ -261,6 +261,17 @@ def api_models():
 @app.route('/api/sessions')
 def api_sessions():
 	return jsonify(chat.list())
+
+@app.route('/API/sessions')
+def API_sessions():
+	return jsonify([{"uuid": uuid, "archived": archived}
+			for archived in (False, True) for uuid, _, _ in chat.list(archived)])
+
+@app.route('/API/sessions/<session_id>')
+def API_session(session_id):
+	session = Session(session_id)
+	return jsonify({"uuid": session.uuid, "archived": session.archived,
+			"messages": [m.to_dict() for m in session.messages]})
 
 @app.route('/api/<session_id>')
 def api_get_session(session_id):
