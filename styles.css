@@ -155,6 +155,69 @@ nav {
 	font-size: 0.75rem;
 }
 
+/* Partial error styling - regular content with error indication */
+.message-error-partial {
+	background: var(--card-bg);
+	border-left: 4px solid var(--error-bg);
+	padding: 10px;
+	border-radius: 4px;
+	margin-bottom: 10px;
+	cursor: pointer;
+}
+
+.message-error-partial .error-message {
+	background: var(--error-bg);
+	color: var(--error-text);
+	padding: 8px;
+	border-radius: 4px;
+	margin-top: 10px;
+	font-size: 0.75rem;
+}
+
+.message-error-partial .reasoning,
+.message-error-partial .response {
+	margin-bottom: 10px;
+}
+
+/* Ensure proper content styling within partial errors */
+.message-error-partial .reasoning {
+	color: var(--reasoning-text);
+	font-style: italic;
+	font-size: 0.8rem;
+}
+
+.message-error-partial .response {
+	font-size: 0.85rem;
+}
+
+.message-error-partial .tool {
+	margin-bottom: 10px;
+	background: var(--card-bg);
+	padding: 5px 10px;
+	border-radius: 4px;
+	font-size: 0.75rem;
+}
+
+.message-error-partial .tool-summary {
+	font-weight: bold;
+	margin-bottom: 4px;
+}
+
+.message-error-partial .tool-raw {
+	margin-top: 4px;
+	color: #999;
+	font-size: 0.85em;
+	white-space: pre;
+	word-break: normal;
+}
+
+/* Copy icon should still work */
+.message-error-partial > .copy-icon {
+	display: block;
+	text-align: right;
+	margin-top: 4px;
+}
+
 .prompt, .reasoning, .tool, .error, .response {
 	cursor: pointer;
 	}

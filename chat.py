@@ -485,11 +485,22 @@ class Message:
 					tool_calls = message.get("tool_calls")
 
 			if error:
+				# Preserve partial content (reasoning and response) even when an error occurs
+				# This allows the frontend to display what was generated before the error
 				if reasoning_parts:
-					yield {"type": "discard_block", "target": "reasoning", "session": session_uuid}
+					# Don't discard reasoning - keep it for display
+					turn.reasoning = "".join(reasoning_parts)
+					turn.save()
+					yield {"type": "reasoning", "content": turn.reasoning,
+							"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
+				
 				if content_parts:
-					yield {"type": "discard_block", "target": "response", "session": session_uuid}
-				turn.reasoning = "".join(reasoning_parts) or None
+					# Don't discard response - keep it for display
+					turn.response = "".join(content_parts)
+					turn.save()
+					yield {"type": "response", "content": turn.response, "model": model.id,
+							"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
+				
 				turn.error = error
 				turn.save()
 				yield {"type": "error", "error": error, "model": model.id,
@@ -554,6 +565,7 @@ class Message:
 			turn.save()
 			yield {"type": "response", "content": turn.response, "model": model.id,
 					"cost": usage.get("cost"), "usage": usage,
+					"context_length": model.context_length,
 					"uuid": turn.uuid, "timestamp": turn.timestamp, "session": session_uuid}
 			return
 
@@ -788,13 +800,13 @@ class Toolbox:
 		return self._move_or_copy(path, new_path, "copy")
 
 	def get_url(self, url):
-		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20)
+		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20, verify=False)
 		if response.status_code != 200:
 			raise ToolError(f"HTTP {response.status_code}")
 		return response.content.decode("utf-8")
 
 	def download_url(self, url, path):
-		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20)
+		response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 ChatPad"}, timeout=20, verify=False)
 		if response.status_code != 200:
 			raise ToolError(f"HTTP {response.status_code}")
 		data = response.content

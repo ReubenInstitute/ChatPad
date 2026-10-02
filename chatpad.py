@@ -171,10 +171,12 @@ def model_icons():
 
 def sse(records, icons):
 	names = model_names()
+	context_lengths = model_context_lengths()
 	for record in records:
 		model = record.get("model")
 		record["icon"] = model_icon_url(icons, model)
 		record["model_name"] = names.get(model) if model else None
+		record["context_length"] = context_lengths.get(model) if model else None
 		yield f"data: {json.dumps(record)}\n\n"
 
 
@@ -182,6 +184,12 @@ def model_names():
 	# id -> display name, built once per stream so the client can label a turn
 	# with the model's name instead of its raw id.
 	return {m.id: (m.name or m.id) for m in chat.models}
+
+
+def model_context_lengths():
+	# id -> context window, built once per stream so the client can render the
+	# same "Max" figure the server-side template shows.
+	return {m.id: getattr(m, "context_length", None) for m in chat.models}
 
 
 @app.route('/models')

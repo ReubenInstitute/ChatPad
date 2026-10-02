@@ -428,10 +428,15 @@ async function appendResponseBlock(turnDiv, record, liveState) {
 			usageDiv.className = 'usage-info';
 			const small = document.createElement('small');
 			let parts = [];
-			if (record.usage.prompt_tokens) parts.push('Prompt: ' + record.usage.prompt_tokens);
-			if (record.usage.completion_tokens) parts.push('Completion: ' + record.usage.completion_tokens);
-			if (record.usage.total_tokens) parts.push('Total: ' + record.usage.total_tokens);
-			if (record.usage.cost !== undefined && record.usage.cost !== null) parts.push('Cost: $' + record.usage.cost.toFixed(6));
+			if (record.usage.prompt_tokens) parts.push('Input: ' + record.usage.prompt_tokens);
+			if (record.usage.completion_tokens) parts.push('Output: ' + record.usage.completion_tokens);
+			if (record.context_length) {
+				let max = 'Max: ' + formatNumber(record.context_length);
+				if (record.usage.prompt_tokens) {
+					max += ' (' + (record.usage.prompt_tokens / record.context_length * 100).toFixed(1) + '%)';
+				}
+				parts.push(max);
+			}
 			small.textContent = parts.join(' | ');
 			usageDiv.appendChild(small);
 			meta.appendChild(usageDiv);
@@ -667,5 +672,37 @@ function initLiveChat() {
 		pendingControls.querySelectorAll('button').forEach(btn => {
 			btn.onclick = () => resumeToolCalls(btn.dataset.action, btn);
 		});
+	}
+}
+
+
+
+
+
+
+
+function formatNumber(n) {
+	if (n === null || n === undefined) return "";
+	if (n === 0) return "0";
+	if (n % 1024 === 0) {
+		if (n < 1024) return `${Math.trunc(n)} B`;
+		const units = ["KiB", "MiB", "GiB", "TiB"];
+		let i = -1;
+		while (n >= 1024 && i < units.length - 1) {
+			n /= 1024;
+			i += 1;
+		}
+		const s = n.toFixed(1).replace(/0+$/, "").replace(/\.$/, "");
+		return `${s} ${units[i]}`;
+	} else {
+		if (n < 1000) return String(Math.trunc(n));
+		const units = ["K", "M", "B", "T"];
+		let i = -1;
+		while (n >= 1000 && i < units.length - 1) {
+			n /= 1000;
+			i += 1;
+		}
+		const s = n.toFixed(1).replace(/0+$/, "").replace(/\.$/, "");
+		return `${s}${units[i]}`;
 	}
 }
