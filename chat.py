@@ -28,7 +28,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
 ARCHIVE_FOLDER = os.path.join(APP_DIR, "archive")
 SESSION_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
-TURN_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
+MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
 
 MAX_STEPS = 50
 PATCH_INTERVAL = 0.08
@@ -180,15 +180,15 @@ class Chat:
 
 		for tool_turn in pending:
 			if action == "deny":
-				tool_turn.response = "User denied this tool call."
+				tool_turn.result = "User denied this tool call."
 			else:
 				output, tool_error = self.toolbox.run(tool_turn.tool, tool_turn.arguments, tools or [])
-				tool_turn.response = output
+				tool_turn.result = output
 				if tool_error:
 					tool_turn.error = {"message": tool_error}
 			tool_turn.save()
 			yield {"type": "tool_result", "tool_call_id": tool_turn.uuid, "name": tool_turn.tool,
-					"content": tool_turn.response, "error": tool_turn.error,
+					"content": tool_turn.result, "error": tool_turn.error,
 					"uuid": tool_turn.uuid, "timestamp": tool_turn.timestamp, "session": session_id}
 
 		if model_obj is None:
@@ -246,7 +246,7 @@ class Session:
 		tmp = self.archive_path + ".tmp"
 		with tarfile.open(tmp, "w:bz2") as tar:
 			for name in sorted(os.listdir(self.folder)):
-				if TURN_PATTERN.match(name):
+				if MESSAGE_PATTERN.match(name):
 					tar.add(os.path.join(self.folder, name), arcname=name)
 		os.replace(tmp, self.archive_path)
 		shutil.rmtree(self.folder)
@@ -271,18 +271,13 @@ class Session:
 			self.unpack()
 		if not os.path.isdir(self.folder):
 			return []
-		filenames = sorted(f for f in os.listdir(self.folder) if TURN_PATTERN.match(f))
-		messages = {}
-		order = []
+		filenames = sorted(f for f in os.listdir(self.folder) if MESSAGE_PATTERN.match(f))
+		messages = []
 		for filename in filenames:
 			with open(os.path.join(self.folder, filename)) as f:
 				data = json.load(f)
-			message_uuid = data["message"]
-			if message_uuid not in messages:
-				messages[message_uuid] = Message(uuid=message_uuid, session=self)
-				order.append(message_uuid)
-			messages[message_uuid].turns.append(Turn.load(messages[message_uuid], data))
-		return [messages[u] for u in order]
+			messages.append(Message.from_dict(self, data))
+		return messages
 
 	@property
 	def blocks(self):
@@ -344,10 +339,38 @@ class Session:
 
 
 class Message:
-	def __init__(self, uuid=None, session=None):
+	def __init__(self, uuid=None, session=None, hidden=False, input_tokens=None, output_tokens=None):
 		self.uuid = uuid
 		self.session = session
+		self.hidden = hidden
+		self.input_tokens = input_tokens
+		self.output_tokens = output_tokens
 		self.turns = []
+
+	@property
+	def path(self):
+		return os.path.join(self.session.folder, f"{self.uuid}.json")
+
+	def to_dict(self):
+		return {"uuid": self.uuid, "session": self.session.uuid, "hidden": self.hidden,
+				"input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
+				"turns": [t.to_dict() for t in self.turns]}
+
+	@staticmethod
+	def from_dict(session, data):
+		message = Message(uuid=data.get("uuid"), session=session, hidden=data.get("hidden", False),
+				input_tokens=data.get("input_tokens"), output_tokens=data.get("output_tokens"))
+		message.turns = [Turn.load(message, t) for t in data.get("turns", [])]
+		return message
+
+	def save(self):
+		if self.session.packed:
+			self.session.unpack()
+		os.makedirs(self.session.folder, exist_ok=True)
+		tmp = self.path + ".tmp"
+		with open(tmp, "w") as f:
+			json.dump(self.to_dict(), f, indent=2)
+		os.replace(tmp, self.path)
 
 	def next_uuid(self):
 		dt = datetime.now(timezone.utc)
@@ -357,25 +380,19 @@ class Message:
 				dt = last + timedelta(milliseconds=1)
 		return str(uuid7.create(dt))
 
-	@property
-	def hidden(self):
-		return bool(self.turns) and self.turns[0].hidden
-
 	def hide(self):
-		if self.turns:
-			self.turns[0].hidden = True
-			self.turns[0].save()
+		self.hidden = True
+		self.save()
 
 	def unhide(self):
-		if self.turns:
-			self.turns[0].hidden = False
-			self.turns[0].save()
+		self.hidden = False
+		self.save()
 
 	@property
 	def pending(self):
 		pending = []
 		for turn in reversed(self.turns):
-			if isinstance(turn, ToolTurn) and turn.response is None and turn.error is None:
+			if isinstance(turn, ToolTurn) and turn.result is None and turn.error is None:
 				pending.insert(0, turn)
 			else:
 				break
@@ -393,7 +410,7 @@ class Message:
 				continue
 			if turn.prompt is not None:
 				blocks.append({"type": "prompt", "content": turn.prompt, "model": turn.model,
-						"uuid": turn.uuid, "timestamp": turn.timestamp, "hidden": turn.hidden, "session": self.session.uuid})
+						"uuid": turn.uuid, "timestamp": turn.timestamp, "hidden": self.hidden, "session": self.session.uuid})
 			if turn.reasoning:
 				blocks.append({"type": "reasoning", "content": turn.reasoning,
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
@@ -412,7 +429,7 @@ class Message:
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
 				for t in run:
 					blocks.append({"type": "tool_result", "tool_call_id": t.uuid, "name": t.tool,
-							"content": t.response, "error": t.error,
+							"content": t.result, "error": t.error,
 							"uuid": t.uuid, "timestamp": t.timestamp, "session": self.session.uuid})
 			elif turn.response:
 				usage = (turn.raw or {}).get("usage") or {}
@@ -545,12 +562,12 @@ class Message:
 
 				for tool_turn in run_turns:
 					output, tool_error = toolbox.run(tool_turn.tool, tool_turn.arguments, tool_names or [])
-					tool_turn.response = output
+					tool_turn.result = output
 					if tool_error:
 						tool_turn.error = {"message": tool_error}
 					tool_turn.save()
 					yield {"type": "tool_result", "tool_call_id": tool_turn.uuid, "name": tool_turn.tool,
-							"content": tool_turn.response, "error": tool_turn.error,
+							"content": tool_turn.result, "error": tool_turn.error,
 							"uuid": tool_turn.uuid, "timestamp": tool_turn.timestamp, "session": session_uuid}
 				continue
 
@@ -562,6 +579,8 @@ class Message:
 
 			turn.response = "".join(content_parts)
 			turn.raw = {"usage": usage}
+			self.input_tokens = usage.get("prompt_tokens")
+			self.output_tokens = usage.get("completion_tokens")
 			turn.save()
 			yield {"type": "response", "content": turn.response, "model": model.id,
 					"cost": usage.get("cost"), "usage": usage,
@@ -578,12 +597,10 @@ class Message:
 
 
 class Turn:
-	def __init__(self, message=None, uuid=None, response=None, error=None, raw=None, hidden=False):
+	def __init__(self, message=None, uuid=None, error=None, hidden=False):
 		self.message = message
 		self.uuid = uuid
-		self.response = response
 		self.error = error
-		self.raw = raw
 		self.hidden = hidden
 
 	@property
@@ -597,24 +614,14 @@ class Turn:
 	def session(self):
 		return self.message.session
 
-	@property
-	def path(self):
-		return os.path.join(self.session.folder, f"{self.uuid}.json")
-
 	def save(self):
-		if self.session.packed:
-			self.session.unpack()
 		if self.uuid is None:
 			self.uuid = str(uuid7.create(datetime.now(timezone.utc)))
-		os.makedirs(self.session.folder, exist_ok=True)
-		tmp = self.path + ".tmp"
-		with open(tmp, "w") as f:
-			json.dump(self.to_dict(), f, indent=2)
-		os.replace(tmp, self.path)
+		self.message.save()
 
 	@staticmethod
 	def load(message, data):
-		if data.get("kind") == "tool":
+		if "tool" in data:
 			return ToolTurn.from_dict(message, data)
 		return MessageTurn.from_dict(message, data)
 
@@ -628,16 +635,18 @@ class Turn:
 class MessageTurn(Turn):
 	def __init__(self, message=None, uuid=None, model=None, think=False, prompt=None, reasoning=None,
 			response=None, error=None, raw=None, hidden=False):
-		super().__init__(message=message, uuid=uuid, response=response, error=error, raw=raw, hidden=hidden)
+		super().__init__(message=message, uuid=uuid, error=error, hidden=hidden)
 		self.model = model
 		self.think = think
 		self.prompt = prompt
 		self.reasoning = reasoning
+		self.response = response
+		self.raw = raw
 
 	def to_dict(self):
-		return {"kind": "message", "message": self.message.uuid, "uuid": self.uuid,
+		return {"uuid": self.uuid, "message": self.message.uuid, "hidden": self.hidden, "error": self.error,
 				"model": self.model, "think": self.think, "prompt": self.prompt, "reasoning": self.reasoning,
-				"response": self.response, "error": self.error, "raw": self.raw, "hidden": self.hidden}
+				"response": self.response, "raw": self.raw}
 
 	@staticmethod
 	def from_dict(message, data):
@@ -648,20 +657,20 @@ class MessageTurn(Turn):
 
 class ToolTurn(Turn):
 	def __init__(self, message=None, uuid=None, tool=None, arguments=None,
-			response=None, error=None, raw=None, hidden=False):
-		super().__init__(message=message, uuid=uuid, response=response, error=error, raw=raw, hidden=hidden)
+			result=None, error=None, hidden=False):
+		super().__init__(message=message, uuid=uuid, error=error, hidden=hidden)
 		self.tool = tool
 		self.arguments = arguments
+		self.result = result
 
 	def to_dict(self):
-		return {"kind": "tool", "message": self.message.uuid, "uuid": self.uuid,
-				"tool": self.tool, "arguments": self.arguments,
-				"response": self.response, "error": self.error, "raw": self.raw, "hidden": self.hidden}
+		return {"uuid": self.uuid, "message": self.message.uuid, "hidden": self.hidden, "error": self.error,
+				"tool": self.tool, "arguments": self.arguments, "result": self.result}
 
 	@staticmethod
 	def from_dict(message, data):
 		return ToolTurn(message=message, uuid=data.get("uuid"), tool=data.get("tool"), arguments=data.get("arguments"),
-				response=data.get("response"), error=data.get("error"), raw=data.get("raw"), hidden=data.get("hidden", False))
+				result=data.get("result"), error=data.get("error"), hidden=data.get("hidden", False))
 
 
 class Tool:
