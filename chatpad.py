@@ -90,9 +90,36 @@ def format_day_filter(day):
 	except:
 		return day
 
+def model_name(model_id):
+	# Display string for a model: its human-readable name, falling back to the
+	# raw id when the model is unknown (e.g. a session saved by another install).
+	if not model_id:
+		return ""
+	for m in chat.models:
+		if m.id == model_id:
+			return m.name or model_id
+	return model_id
+
+def model_icon_slug(model_id):
+	# Provider icon filename (without extension) for a model id. OpenRouter and
+	# DeepSeek ids embed the vendor as the second path segment, but local ids are
+	# just "local/<name>" with no vendor, and the local models are all Qwen.
+	if not model_id or "/" not in model_id:
+		return None
+	provider, _, rest = model_id.partition("/")
+	if provider == "local":
+		return "qwen"
+	return rest.split("/")[0].lstrip("~")
+
+def model_icon_url(icons, model_id):
+	slug = model_icon_slug(model_id)
+	return icons.get(slug) if slug else None
+
 app.jinja_env.globals['tool_summary'] = tool_summary
 app.jinja_env.globals['find_tool_result'] = find_tool_result
 app.jinja_env.globals['NO_CONTENT_TOOLS'] = NO_CONTENT_TOOLS
+app.jinja_env.globals['model_name'] = model_name
+app.jinja_env.globals['model_icon_url'] = model_icon_url
 
 @app.context_processor
 def inject_globals():
@@ -140,6 +167,22 @@ def model_icons():
 	for f in os.listdir(os.path.join(ROOT, "@@", "models")):
 		icons[os.path.splitext(f)[0]] = f"/@@/models/{f}"
 	return icons
+
+
+def sse(records, icons):
+	names = model_names()
+	for record in records:
+		model = record.get("model")
+		record["icon"] = model_icon_url(icons, model)
+		record["model_name"] = names.get(model) if model else None
+		yield f"data: {json.dumps(record)}\n\n"
+
+
+def model_names():
+	# id -> display name, built once per stream so the client can label a turn
+	# with the model's name instead of its raw id.
+	return {m.id: (m.name or m.id) for m in chat.models}
+
 
 @app.route('/models')
 def models_view():
@@ -246,10 +289,9 @@ def api_resume_blocks(session_id):
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
-	def generate():
-		for record in chat.resume(session_id, action, model, reasoning, tools, mode):
-			yield f"data: {json.dumps(record)}\n\n"
-	return Response(generate(), mimetype='text/event-stream')
+	icons = model_icons()
+	records = chat.resume(session_id, action, model, reasoning, tools, mode)
+	return Response(sse(records, icons), mimetype='text/event-stream')
 
 @app.route('/api/<session_id>/hide/<uuid>', methods=['POST'])
 def api_hide_message(session_id, uuid):
@@ -268,10 +310,9 @@ def api_blocks(session_id=None):
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
 	session = session_id or request.form.get('session')
-	def generate():
-		for record in chat.message(prompt, model, reasoning, session, tools, mode):
-			yield f"data: {json.dumps(record)}\n\n"
-	return Response(generate(), mimetype='text/event-stream')
+	icons = model_icons()
+	records = chat.message(prompt, model, reasoning, session, tools, mode)
+	return Response(sse(records, icons), mimetype='text/event-stream')
 
 @app.route('/rotate-keys', methods=['POST'])
 def rotate_keys():

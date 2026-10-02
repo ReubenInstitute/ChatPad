@@ -25,7 +25,7 @@
 		{% for model in models %}
 			<tr>
 				<td>
-					{% set icon = icons.get(model.id.split('/')[1].lstrip('~')) %}
+					{% set icon = model_icon_url(icons, model.id) %}
 					<h4>{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %} {{ model.name }}</h4>
 					<span class="model-description">{{ model.description }}</span>
 				</td>

@@ -1,7 +1,8 @@
-
 function copyBlock(button) {
 	const content = button.parentElement.querySelector('.content');
-	navigator.clipboard.writeText(content.textContent.trim());
+	const clone = content.cloneNode(true);
+	clone.querySelectorAll('.turn-time').forEach(el => el.remove());
+	navigator.clipboard.writeText(clone.textContent.trim());
 }
 
 async function hideMessageTurn(button, sessionId, uuid) {
@@ -20,13 +21,7 @@ function initializeChatView() {
 		const selector = isLast ? '.tool' : '.prompt, .reasoning, .tool, .error, .response';
 
 		message.querySelectorAll(selector).forEach(container => {
-			const expandedDiv = container.children[0];
-			const collapsedDiv = container.children[1];
-
-			if (expandedDiv && collapsedDiv) {
-				expandedDiv.style.display = 'none';
-				collapsedDiv.style.display = 'block';
-			}
+			container.classList.add('collapsed');
 		});
 	});
 
@@ -48,11 +43,7 @@ function initializeChatView() {
 
 function toggleMessage(container) {
 	if (window.getSelection().toString()) return;
-	const expanded = container.children[0];
-	const collapsed = container.children[1];
-	const isExpanded = expanded.style.display !== 'none';
-	expanded.style.display = isExpanded ? 'none' : 'block';
-	collapsed.style.display = isExpanded ? 'block' : 'none';
+	container.classList.toggle('collapsed');
 }
 
 const TOOLS_STORAGE_KEY = 'chatpad-enabled-tools';
@@ -104,7 +95,7 @@ function toggleReasoning(el) {
 }
 
 function restoreReasoning() {
-	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	const el = document.getElementById('reasoning-toggle');
 	if (!el) return;
 	const input = el.nextElementSibling;
 	const saved = localStorage.getItem(REASONING_STORAGE_KEY);
@@ -114,7 +105,7 @@ function restoreReasoning() {
 }
 
 function saveReasoning() {
-	const el = document.querySelector('.opt-reasoning .tool-toggle');
+	const el = document.getElementById('reasoning-toggle');
 	if (!el) return;
 	localStorage.setItem(REASONING_STORAGE_KEY, el.classList.contains('enabled'));
 }
@@ -142,11 +133,31 @@ async function refreshModels() {
 	location.reload();
 }
 
+// Mirror the picked option's icon and name onto the collapsed menu header, so
+// the closed menu shows which model is selected. Options carry their icon as a
+// nested <img class="model-icon-small"> (absent for the "none" option); the
+// header is an <img> + <span> pair so the icon can be swapped in and out.
+function setHeaderModel(header, source) {
+	const sourceIcon = source.querySelector('img.model-icon-small');
+	const headerIcon = header.querySelector('img.model-icon-small');
+	const nameEl = header.querySelector('span');
+	if (headerIcon) {
+		if (sourceIcon) {
+			headerIcon.src = sourceIcon.src;
+			headerIcon.hidden = false;
+		} else {
+			headerIcon.removeAttribute('src');
+			headerIcon.hidden = true;
+		}
+	}
+	if (nameEl) nameEl.textContent = source.dataset.name;
+}
+
 function selectModel(el) {
 	document.querySelectorAll('#model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
 	document.getElementById('model-input').value = el.dataset.id;
-	document.getElementById('model-header').textContent = el.dataset.id;
+	setHeaderModel(document.getElementById('model-header'), el);
 	document.getElementById('model-list').classList.add('collapsed');
 	saveSelectedModel();
 }
@@ -172,7 +183,7 @@ function toggleSystemModelList() {
 function selectSystemModel(el) {
 	document.querySelectorAll('#system-model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
-	document.getElementById('system-model-header').textContent = el.dataset.id || 'none';
+	setHeaderModel(document.getElementById('system-model-header'), el);
 	document.getElementById('system-model-header').classList.remove('hidden');
 	document.getElementById('system-model-list').classList.add('collapsed');
 	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
@@ -260,26 +271,16 @@ function buildCopyIcon() {
 	return span;
 }
 
-function buildBlock(className, expandedNode, collapsedText) {
+function buildBlock(className, expandedNode) {
 	const div = document.createElement('div');
 	div.className = className;
 	div.onclick = function() { toggleMessage(div); };
 
-	const expandedWrap = document.createElement('div');
-	const expandedContent = document.createElement('div');
-	expandedContent.className = 'content';
-	expandedContent.appendChild(expandedNode);
-	expandedWrap.appendChild(expandedContent);
-	expandedWrap.appendChild(buildCopyIcon());
-
-	const collapsedWrap = document.createElement('div');
-	collapsedWrap.style.display = 'none';
-	const collapsedSpan = document.createElement('span');
-	collapsedSpan.textContent = collapsedText;
-	collapsedWrap.appendChild(collapsedSpan);
-
-	div.appendChild(expandedWrap);
-	div.appendChild(collapsedWrap);
+	const content = document.createElement('div');
+	content.className = 'content';
+	content.appendChild(expandedNode);
+	div.appendChild(content);
+	div.appendChild(buildCopyIcon());
 	return div;
 }
 
@@ -290,39 +291,16 @@ async function appendPromptBlock(turnDiv, record) {
 	div.className = 'prompt';
 	div.onclick = function() { toggleMessage(div); };
 
-	const expandedWrap = document.createElement('div');
-	const expandedContent = document.createElement('div');
-	expandedContent.className = 'content';
-	const expandedTime = document.createElement('span');
-	expandedTime.className = 'turn-time';
-	expandedTime.textContent = time;
-	expandedContent.appendChild(expandedTime);
-	expandedContent.appendChild(document.createTextNode(' ' + record.content));
-	expandedWrap.appendChild(expandedContent);
-	expandedWrap.appendChild(buildCopyIcon());
-
-	const collapsedWrap = document.createElement('div');
-	collapsedWrap.style.display = 'none';
-	const collapsedTime = document.createElement('span');
-	collapsedTime.className = 'turn-time';
-	collapsedTime.textContent = time;
-	const collapsedText = document.createElement('span');
-	collapsedText.textContent = short(record.content);
-	collapsedWrap.appendChild(collapsedTime);
-	collapsedWrap.appendChild(collapsedText);
-
-	div.appendChild(expandedWrap);
-	div.appendChild(collapsedWrap);
+	const content = document.createElement('div');
+	content.className = 'content';
+	const timeSpan = document.createElement('span');
+	timeSpan.className = 'turn-time';
+	timeSpan.textContent = time;
+	content.appendChild(timeSpan);
+	content.appendChild(document.createTextNode(' ' + record.content));
+	div.appendChild(content);
+	div.appendChild(buildCopyIcon());
 	turnDiv.appendChild(div);
-
-	if (record.model) {
-		const info = document.createElement('div');
-		info.className = 'info';
-		const small = document.createElement('small');
-		small.textContent = record.model;
-		info.appendChild(small);
-		turnDiv.appendChild(info);
-	}
 
 	ensureMessageActions(turnDiv, record.session, record.uuid);
 }
@@ -348,11 +326,9 @@ function ensureLiveBlock(turnDiv, liveState, target) {
 	if (liveState[target]) return liveState[target];
 	const className = target === 'reasoning' ? 'reasoning' : 'response';
 	const contentNode = document.createElement('div');
-	const div = buildBlock(className, contentNode, '');
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
+	const div = buildBlock(className, contentNode);
 	turnDiv.appendChild(div);
-	const state = { div, content: div.children[0].querySelector('.content'), html: '' };
+	const state = { div, content: div.querySelector('.content'), html: '' };
 	liveState[target] = state;
 	scrollIfAtBottom();
 	return state;
@@ -397,7 +373,6 @@ function discardLiveBlock(liveState, target) {
 function finalizeLiveBlock(liveState, target) {
 	const state = liveState && liveState[target];
 	if (state) {
-		state.div.children[1].querySelector('span').textContent = short(state.content.textContent);
 		liveState[target] = null;
 	}
 }
@@ -407,15 +382,12 @@ async function appendReasoningBlock(turnDiv, record, liveState) {
 	const live = liveState && liveState.reasoning;
 	if (live) {
 		live.content.innerHTML = html;
-		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
 		liveState.reasoning = null;
 		return;
 	}
 	const contentNode = document.createElement('div');
 	contentNode.innerHTML = html;
-	const div = buildBlock('reasoning', contentNode, short(contentNode.textContent));
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
+	const div = buildBlock('reasoning', contentNode);
 	turnDiv.appendChild(div);
 }
 
@@ -424,30 +396,47 @@ async function appendResponseBlock(turnDiv, record, liveState) {
 	const live = liveState && liveState.response;
 	if (live) {
 		live.content.innerHTML = html;
-		live.div.children[1].querySelector('span').textContent = short(live.content.textContent);
 		liveState.response = null;
 	} else {
 		const contentNode = document.createElement('div');
 		contentNode.innerHTML = html;
-		const div = buildBlock('response', contentNode, short(contentNode.textContent));
-		div.children[0].style.display = 'block';
-		div.children[1].style.display = 'none';
+		const div = buildBlock('response', contentNode);
 		turnDiv.appendChild(div);
 	}
 
-	// Add usage info if available
-	if (record.usage) {
-		const usageDiv = document.createElement('div');
-		usageDiv.className = 'usage-info';
-		const small = document.createElement('small');
-		let parts = [];
-		if (record.usage.prompt_tokens) parts.push('Prompt: ' + record.usage.prompt_tokens);
-		if (record.usage.completion_tokens) parts.push('Completion: ' + record.usage.completion_tokens);
-		if (record.usage.total_tokens) parts.push('Total: ' + record.usage.total_tokens);
-		if (record.usage.cost !== undefined && record.usage.cost !== null) parts.push('Cost: $' + record.usage.cost.toFixed(6));
-		small.textContent = parts.join(' | ');
-		usageDiv.appendChild(small);
-		turnDiv.appendChild(usageDiv);
+	// Model + usage lines, grouped in one wrapper so they stack with no gap
+	if (record.model || record.usage) {
+		const meta = document.createElement('div');
+		meta.className = 'turn-meta';
+		if (record.model) {
+			const info = document.createElement('div');
+			info.className = 'info';
+			if (record.icon) {
+				const img = document.createElement('img');
+				img.className = 'model-icon';
+				img.src = record.icon;
+				img.alt = '';
+				info.appendChild(img);
+			}
+			const small = document.createElement('small');
+			small.textContent = record.model_name || record.model;
+			info.appendChild(small);
+			meta.appendChild(info);
+		}
+		if (record.usage) {
+			const usageDiv = document.createElement('div');
+			usageDiv.className = 'usage-info';
+			const small = document.createElement('small');
+			let parts = [];
+			if (record.usage.prompt_tokens) parts.push('Prompt: ' + record.usage.prompt_tokens);
+			if (record.usage.completion_tokens) parts.push('Completion: ' + record.usage.completion_tokens);
+			if (record.usage.total_tokens) parts.push('Total: ' + record.usage.total_tokens);
+			if (record.usage.cost !== undefined && record.usage.cost !== null) parts.push('Cost: $' + record.usage.cost.toFixed(6));
+			small.textContent = parts.join(' | ');
+			usageDiv.appendChild(small);
+			meta.appendChild(usageDiv);
+		}
+		turnDiv.appendChild(meta);
 	}
 }
 
@@ -461,9 +450,7 @@ async function appendErrorBlock(turnDiv, record) {
 		small.textContent = 'Code: ' + record.error.code;
 		contentNode.appendChild(small);
 	}
-	const div = buildBlock('error', contentNode, short(record.error.message));
-	div.children[0].style.display = 'block';
-	div.children[1].style.display = 'none';
+	const div = buildBlock('error', contentNode);
 	turnDiv.appendChild(div);
 }
 
@@ -492,10 +479,9 @@ function appendToolCallBlock(turnDiv, record, liveState) {
 		summary.textContent = label;
 		contentNode.appendChild(summary);
 
-		const div = buildBlock('tool', contentNode, label);
+		const div = buildBlock('tool', contentNode);
 		div.dataset.callId = call.id;
-		div.children[0].style.display = 'none';
-		div.children[1].style.display = 'block';
+		div.classList.add('collapsed');
 		turnDiv.appendChild(div);
 	});
 }
@@ -652,7 +638,7 @@ async function submitLiveChat(event) {
 	const promptEl = document.getElementById('prompt');
 	promptEl.value = '';
 	const button = form.querySelector('button[type="submit"]');
-	button.disabled = true;
+	if (button) button.disabled = true;
 
 	initializeChatView();
 	const turnDiv = document.createElement('div');
@@ -665,7 +651,7 @@ async function submitLiveChat(event) {
 		const response = await fetch(url, { method: 'POST', body: formData });
 		await consumeBlockStream(response, turnDiv, liveState);
 	} finally {
-		button.disabled = false;
+		if (button) button.disabled = false;
 	}
 }
 
