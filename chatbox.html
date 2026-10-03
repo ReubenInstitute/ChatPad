@@ -5,7 +5,7 @@
 
 <div class="chatbox-top">
     <div id="system-model-link" onclick="toggleSystemModelList()"><img src="" alt="" hidden><span>none</span></div>
-    <div class="menu hidden" id="system-model-list">
+    <div class="menu hidden" id="system-model-menu">
         <div class="action" onclick="toggleSystemModelList()"><i data-lucide="x"></i></div>
         <div onclick="toggleSystemModelList()">Models</div>
         <div data-id="" data-name="none" onclick="selectSystemModel(this)">none</div>
@@ -16,7 +16,7 @@
     </div>
 </div>
 
-<form id="chat-form" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
+<form id="chat-form" data-session-id="{{ session_id or '' }}" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
     <div class="chatbox-input">
         <textarea name="prompt" rows="2" placeholder="Message" required style="background: transparent;"></textarea>
         <div id="send-controls">
@@ -24,7 +24,7 @@
         </div>
     </div>
 
-    <div class="menu hidden" id="model-list">
+    <div class="menu hidden" id="model-menu">
         <div class="action" onclick="toggleModelList()"><i data-lucide="x"></i></div>
         <div>OpenRouter</div>
         {% for model in MODELS if model.id.split('/')[0] == 'openrouter' %}
@@ -45,7 +45,7 @@
         {% endfor %}
     </div>
 
-    <div class="menu hidden" id="tools-list">
+    <div class="menu hidden" id="tools-menu">
         <div class="action" onclick="toggleToolsList()"><i data-lucide="x"></i></div>
         {% for tool in TOOLS %}
             <div data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>

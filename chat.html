@@ -11,167 +11,7 @@
 {% block content %}
 
 {% if session_id %}
-    <div>
-    {% for turn in turns %}
-        <div class="message" data-uuid="{{ turn[0].uuid }}">
-            {% set resp_msgs = turn | selectattr('type', 'equalto', 'response') | selectattr('content') | list %}
-            {% set last_resp = resp_msgs[-1] if resp_msgs else None %}
-            {% for msg in turn %}
-            {% if msg.type == "prompt" %}
-                <div class="prompt" onclick="toggleMessage(this)">
-                    <div>
-                        <span>{{ turn[0].timestamp|format_time }}</span>
-                        {{ msg.content }}
-                    </div>
-                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                </div>
-            {% elif msg.type == "reasoning" %}
-                <div class="reasoning" onclick="toggleMessage(this)">
-                    <div>
-                        {{ msg.content|markdown|safe }}
-                    </div>
-                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                </div>
-            {% elif msg.type == "tool_call" %}
-                {% if msg.content %}
-                <div class="response" onclick="toggleMessage(this)">
-                    <div>
-                        {{ msg.content|markdown|safe }}
-                    </div>
-                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                </div>
-                {% endif %}
-                {% for call in msg.tool_calls %}
-                {% set result = find_tool_result(turn, call.id) %}
-                {% set label = tool_summary(call.function.name, call.function.arguments) %}
-                {% if call.function.name in NO_CONTENT_TOOLS %}
-                <div class="tool{{ ' error' if result and result.error else '' }}">
-                    <div><span>{{ label }}</span>{% if result and result.error %} <span>{{ result.error.message }}</span>{% endif %}</div>
-                </div>
-                {% else %}
-                <div class="tool{{ ' error' if result and result.error else '' }}" onclick="toggleMessage(this)">
-                    <div>
-                        <div>{{ label }}</div>
-                        {% if result and result.content %}
-                            <div>{{ result.content }}</div>
-                        {% endif %}
-                    </div>
-                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                </div>
-                {% endif %}
-                {% endfor %}
-            {% elif msg.type == "error" %}
-                {# Check if this error has associated content (reasoning, response, or tools) #}
-                {% set has_reasoning = msg.reasoning and msg.reasoning != "" %}
-                {% set has_response = msg.response and msg.response != "" %}
-                {% set has_tools = msg.tools and msg.tools|length > 0 %}
-
-                {% if has_reasoning or has_response or has_tools %}
-                    {# Partial error: display content normally but with error styling #}
-                    <div onclick="toggleMessage(this)">
-                        {% if has_reasoning %}
-                            <div class="reasoning">
-                                <div>{{ msg.reasoning|markdown|safe }}</div>
-                            </div>
-                        {% endif %}
-
-                        {% if has_response %}
-                            <div class="response">
-                                <div>{{ msg.response|markdown|safe }}</div>
-                            </div>
-                        {% endif %}
-
-                        {% if has_tools %}
-                            {% for tool in msg.tools %}
-                                {# Display tool content #}
-                                <div class="tool">
-                                    <div>
-                                        <div>{{ tool.label }}</div>
-                                        {% if tool.content %}
-                                            <div>{{ tool.content }}</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% endif %}
-
-                        {# Error message at the end #}
-                        <div class="error">
-                            <p>{{ msg.error.message }}</p>
-                            {% if msg.error.code %}
-                                <small>Code: {{ msg.error.code }}</small>
-                            {% endif %}
-                            {% if msg.error.metadata %}
-                                <p>{{ msg.error.metadata.raw }}</p>
-                            {% endif %}
-                        </div>
-
-                        <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                    </div>
-                {% else %}
-                    {# Pure error: display as before #}
-                    <div class="error" onclick="toggleMessage(this)">
-                        <div>
-                            <p>{{ msg.error.message }}</p>
-                            {% if msg.error.code %}
-                                <small>Code: {{ msg.error.code }}</small>
-                            {% endif %}
-                            {% if msg.error.metadata %}
-                                <p>{{ msg.error.metadata.raw }}</p>
-                            {% endif %}
-                        </div>
-                        <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                    </div>
-                {% endif %}
-            {% elif msg.type == "response" and msg.content %}
-                <div class="response" onclick="toggleMessage(this)">
-                    <div>
-                        {{ msg.content|markdown|safe }}
-                    </div>
-                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
-                </div>
-            {% elif msg.type == "tool_stopped" %}
-                <div>Stopped</div>
-            {% endif %}
-            {% endfor %}
-            {% if last_resp %}
-            <div>
-                <div class="info">
-                    {% set icon = model_icon_url(icons, last_resp.model) %}
-                    {% if icon %}<img src="{{ icon }}" alt="">{% endif %}
-                    <small>{{ model_name(last_resp.model) }}</small>
-                </div>
-                {% if last_resp.usage %}
-                <div>
-                    <small>
-                        {% if last_resp.usage.prompt_tokens %}Input: {{ last_resp.usage.prompt_tokens }}{% endif %}
-                        {% if last_resp.usage.completion_tokens %}{% if last_resp.usage.prompt_tokens %} | {% endif %}Output: {{ last_resp.usage.completion_tokens }}{% endif %}
-
-                        {% set model_obj = MODELS|selectattr('id', 'equalto', last_resp.model)|first %}
-                            {% if model_obj and model_obj.context_length %}
-                                | Max: {{ model_obj.context_length }}
-                                {% if last_resp.usage.prompt_tokens %}
-                                    ({{ (last_resp.usage.prompt_tokens / model_obj.context_length * 100)|round(1) }}%)
-                                {% endif %}
-                            {% endif %}
-                    </small>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
-            <div>
-                <span class="action" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history"><i data-lucide="eye-off"></i></span>
-            </div>
-        </div>
-    {% endfor %}
-    {% if pending_tool_calls %}
-        <div>
-            <button type="button" data-action="approve" onclick="resumeToolCalls('approve', this)">Approve</button>
-            <button type="button" data-action="deny" onclick="resumeToolCalls('deny', this)">Deny</button>
-            <button type="button" data-action="stop" onclick="resumeToolCalls('stop', this)">Stop</button>
-        </div>
-    {% endif %}
-    </div>
+    <div class="session"></div>
 {% endif %}
 
     <div>
@@ -193,7 +33,6 @@
 
 {% if not session_id %}
 
-    {% include "sessions.html" %}
 
     <form action="/rotate-keys" method="post">
         <button type="submit">Rotate keys</button>
@@ -203,7 +42,6 @@
 {% endif %}
 
 <script>
-const SESSION_ID = "{{ session_id or '' }}";
 const NO_CONTENT_TOOLS = {{ NO_CONTENT_TOOLS|list|tojson }};
 const MODEL_ICONS = {{ icons|tojson }};
 document.addEventListener('DOMContentLoaded', function() {

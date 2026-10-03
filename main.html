@@ -7,11 +7,10 @@
 <div id="messages"></div>
 <div id="prompt"></div>
 
-{% include "chatbox.html" %}
 <div id="chat-output"></div>
 
 <script>
-	const app = new App()
+	const app = new ChatPad()
 	app.load().then(() => {
 		document.getElementById("count").textContent = app.sessions.length
 		app.id = app.sessions.map(s => s.uuid).sort().pop()
@@ -58,7 +57,7 @@
 	}
 
 	async function openStream(sessionId) {
-		const response = await fetch(`/API/sessions/${sessionId}/stream`)
+		const response = await fetch(`/api/sessions/${sessionId}/stream`)
 		const reader = response.body.getReader()
 		const decoder = new TextDecoder()
 		let buffer = ""
@@ -80,7 +79,7 @@
 		const prompt = form.querySelector('textarea[name="prompt"]').value
 		if (!prompt) return
 		const data = new FormData(form)
-		const url = chatSessionId ? `/API/sessions/${chatSessionId}/message` : "/API/message"
+		const url = chatSessionId ? `/api/sessions/${chatSessionId}/message` : "/api/message"
 		fetch(url, { method: "POST", body: data }).then(r => r.json()).then(ack => {
 			if (!chatSessionId) {
 				chatSessionId = ack.session
@@ -93,7 +92,7 @@
 		if (!chatSessionId) return
 		pausePending = true
 		setButtons("busy-pause-pending")
-		fetch(`/API/sessions/${chatSessionId}/pause`, { method: "POST" })
+		fetch(`/api/sessions/${chatSessionId}/pause`, { method: "POST" })
 	}
 
 	function resumeChat() {
@@ -101,12 +100,12 @@
 		const form = document.getElementById("chat-form")
 		const data = new FormData(form)
 		data.delete("prompt")
-		fetch(`/API/sessions/${chatSessionId}/resume`, { method: "POST" })
+		fetch(`/api/sessions/${chatSessionId}/resume`, { method: "POST" })
 	}
 
 	function stopChat() {
 		if (!chatSessionId) return
-		fetch(`/API/sessions/${chatSessionId}/stop`, { method: "POST" })
+		fetch(`/api/sessions/${chatSessionId}/stop`, { method: "POST" })
 	}
 
 	document.getElementById("chat-form").addEventListener("submit", e => {

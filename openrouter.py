@@ -1,7 +1,6 @@
 import requests
 import json
 import random
-import time
 import os
 
 def api_key():
@@ -166,10 +165,7 @@ class OpenRouter:
 				if failure:
 					yield failure
 					return
-				deadline = time.monotonic() + OpenRouter.timeout
 				for raw_line in response.iter_lines():
-					if time.monotonic() > deadline:
-						raise TimeoutError(f"no complete reply after {OpenRouter.timeout} seconds")
 					if not raw_line:
 						continue
 					line = raw_line.decode("utf-8")

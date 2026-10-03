@@ -1,6 +1,5 @@
 import json
 import os
-import time
 import requests
 
 from openrouter import Model, http_error
@@ -16,7 +15,7 @@ class DeepSeek:
 
 	# Thinking mode is stateful: reasoning from earlier assistant messages must
 	# be replayed as `reasoning_content`, otherwise every follow-up request is
-	# rejected with HTTP 400. See Session.history in chat.py.
+	# rejected with HTTP 400. See Session.history in chatpad.py.
 	requires_reasoning_content = True
 
 	def __init__(self):
@@ -82,10 +81,7 @@ class DeepSeek:
 				if failure:
 					yield failure
 					return
-				deadline = time.monotonic() + DeepSeek.timeout
 				for raw_line in response.iter_lines():
-					if time.monotonic() > deadline:
-						raise TimeoutError(f"no complete reply after {DeepSeek.timeout} seconds")
 					if not raw_line:
 						continue
 					line = raw_line.decode("utf-8")
