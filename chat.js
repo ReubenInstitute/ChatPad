@@ -157,7 +157,7 @@ function selectModel(el) {
 	document.querySelectorAll('#model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
 	document.getElementById('model-input').value = el.dataset.id;
-	setHeaderModel(document.getElementById('model-header'), el);
+	setHeaderModel(document.getElementById('model-link'), el);
 	document.getElementById('model-list').classList.add('hidden');
 	saveSelectedModel();
 }
@@ -177,14 +177,14 @@ const SYSTEM_MODEL_STORAGE_KEY = 'chatpad-system-model';
 
 function toggleSystemModelList() {
 	const hidden = document.getElementById('system-model-list').classList.toggle('hidden');
-	document.getElementById('system-model-header').classList.toggle('hidden', !hidden);
+	document.getElementById('system-model-link').classList.toggle('hidden', !hidden);
 }
 
 function selectSystemModel(el) {
 	document.querySelectorAll('#system-model-list .model-toggle.enabled').forEach(other => other.classList.remove('enabled'));
 	el.classList.add('enabled');
-	setHeaderModel(document.getElementById('system-model-header'), el);
-	document.getElementById('system-model-header').classList.remove('hidden');
+	setHeaderModel(document.getElementById('system-model-link'), el);
+	document.getElementById('system-model-link').classList.remove('hidden');
 	document.getElementById('system-model-list').classList.add('hidden');
 	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
 }
