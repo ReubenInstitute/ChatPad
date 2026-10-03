@@ -208,7 +208,8 @@ def models_view():
 
 @app.route('/')
 def main():
-	return render_template('main.html', icons=model_icons())
+	sessions = chatpad.group_by_day(archived=False)
+	return render_template('main.html', sessions=sessions, icons=model_icons())
 
 @app.route('/archive')
 def archive():
@@ -319,10 +320,14 @@ def api_resume_session(session_id):
 	reasoning = 'reasoning' in request.form
 	tools = request.form.getlist('tools')
 	mode = request.form.get('mode', 'auto')
+	action = request.form.get('action')
 	session_obj = Session(session_id)
 	session_obj.status = "busy"
 	broadcast(session_id, {"type": "status", "status": "busy", "session": session_id})
-	records = chatpad.continue_message(session_id, model, reasoning, tools, mode, pause_requested=pause_requested)
+	if action:
+		records = chatpad.resume(session_id, action, model, reasoning, tools, mode)
+	else:
+		records = chatpad.continue_message(session_id, model, reasoning, tools, mode, pause_requested=pause_requested)
 	threading.Thread(target=run_records, args=(records, session_obj), daemon=True).start()
 	return jsonify({"session": session_id})
 
@@ -350,10 +355,13 @@ def api_unhide_message(session_id, uuid):
 
 def run_records(records, session_obj):
 	paused = False
+	awaiting = False
 	try:
 		for record in records:
 			if record.get("type") == "paused":
 				paused = True
+			elif record.get("type") == "await_approval":
+				awaiting = True
 			broadcast(session_obj.uuid, record)
 			if session_obj.uuid in stop_requested:
 				stop_requested.discard(session_obj.uuid)
@@ -361,7 +369,7 @@ def run_records(records, session_obj):
 				break
 	finally:
 		pause_requested.discard(session_obj.uuid)
-		session_obj.status = "paused" if paused else "idle"
+		session_obj.status = "awaiting" if awaiting else "paused" if paused else "idle"
 		broadcast(session_obj.uuid, {"type": "status", "status": session_obj.status, "session": session_obj.uuid})
 
 @app.route('/api/message', methods=['POST'])

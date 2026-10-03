@@ -14,6 +14,10 @@
     <div class="session"></div>
 {% endif %}
 
+    <template id="permission-template">
+        {% include "permissionbox.html" %}
+    </template>
+
     {% include "chatbox.html" %}
 
 {% if not session_id %}
@@ -27,7 +31,6 @@
 {% endif %}
 
 <script>
-const NO_CONTENT_TOOLS = {{ NO_CONTENT_TOOLS|list|tojson }};
 const MODEL_ICONS = {{ icons|tojson }};
 </script>
 

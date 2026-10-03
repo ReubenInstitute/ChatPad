@@ -3,114 +3,15 @@
 {% block title %}Main{% endblock %}
 
 {% block content %}
-<div id="count"></div>
-<div id="messages"></div>
-<div id="prompt"></div>
-
-<div id="chat-output"></div>
-
-<script>
-	const app = new ChatPad()
-	app.load().then(() => {
-		document.getElementById("count").textContent = app.sessions.length
-		app.id = app.sessions.map(s => s.uuid).sort().pop()
-		return app.load()
-	}).then(() => {
-		const messages = app.session.messages
-		document.getElementById("messages").textContent = messages.length
-		document.getElementById("prompt").textContent = messages[0].turns[0].prompt
-	})
-
-	let chatSessionId = null
-	let pausePending = false
-
-	function setButtons(state) {
-		const controls = document.getElementById("send-controls")
-		if (state === "idle") {
-			controls.innerHTML = '<div class="action" title="Send" onclick="sendChatMessage()">Send</div>'
-		} else if (state === "busy") {
-			controls.innerHTML = '<div class="action" title="Stop" onclick="stopChat()">Stop</div>' +
-				'<div class="action" title="Pause" onclick="pauseChat()">Pause</div>'
-		} else if (state === "busy-pause-pending") {
-			controls.innerHTML = '<div class="action" title="Stop" onclick="stopChat()">Stop</div>' +
-				'<div class="action" title="Resume" style="pointer-events: none;">Resume</div>'
-		} else if (state === "paused") {
-			controls.innerHTML = '<div class="action" title="Resume" onclick="resumeChat()">Resume</div>'
-		}
-	}
-
-	function logOutput(text) {
-		document.getElementById("chat-output").textContent += text
-	}
-
-	function handleRecord(record) {
-		if (record.type === "status") {
-			pausePending = false
-			setButtons(record.status)
-			return
-		}
-		if (record.type === "error") {
-			logOutput("\n[error] " + JSON.stringify(record.error))
-			return
-		}
-		if (record.content) logOutput(record.content)
-	}
-
-	async function openStream(sessionId) {
-		const response = await fetch(`/api/sessions/${sessionId}/stream`)
-		const reader = response.body.getReader()
-		const decoder = new TextDecoder()
-		let buffer = ""
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-			buffer += decoder.decode(value, { stream: true })
-			const parts = buffer.split("\n\n")
-			buffer = parts.pop()
-			for (const part of parts) {
-				if (!part.startsWith("data: ")) continue
-				handleRecord(JSON.parse(part.slice(6)))
-			}
-		}
-	}
-
-	function sendChatMessage() {
-		const form = document.getElementById("chat-form")
-		const prompt = form.querySelector('textarea[name="prompt"]').value
-		if (!prompt) return
-		const data = new FormData(form)
-		const url = chatSessionId ? `/api/sessions/${chatSessionId}/message` : "/api/message"
-		fetch(url, { method: "POST", body: data }).then(r => r.json()).then(ack => {
-			if (!chatSessionId) {
-				chatSessionId = ack.session
-				openStream(chatSessionId)
-			}
-		})
-	}
-
-	function pauseChat() {
-		if (!chatSessionId) return
-		pausePending = true
-		setButtons("busy-pause-pending")
-		fetch(`/api/sessions/${chatSessionId}/pause`, { method: "POST" })
-	}
-
-	function resumeChat() {
-		if (!chatSessionId) return
-		const form = document.getElementById("chat-form")
-		const data = new FormData(form)
-		data.delete("prompt")
-		fetch(`/api/sessions/${chatSessionId}/resume`, { method: "POST" })
-	}
-
-	function stopChat() {
-		if (!chatSessionId) return
-		fetch(`/api/sessions/${chatSessionId}/stop`, { method: "POST" })
-	}
-
-	document.getElementById("chat-form").addEventListener("submit", e => {
-		e.preventDefault()
-		sendChatMessage()
-	})
-</script>
+<div id="sessions-table">
+{% for day, group in sessions %}
+	<h3>{{ day|format_day }}</h3>
+	{% for s_id, timestamp, title in group %}
+	<div class="session-row">
+		<span class="session-time">{{ timestamp|format_hm }}</span>
+		<a href="/chat/{{ s_id }}">{{ title }}</a>
+	</div>
+	{% endfor %}
+{% endfor %}
+</div>
 {% endblock %}

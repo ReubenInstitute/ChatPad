@@ -2,7 +2,7 @@ import os
 import io
 import json
 import tarfile
-from chat import SESSIONS_FOLDER, ARCHIVE_FOLDER, SESSION_PATTERN, read_session_messages
+from chatpad import SESSIONS_FOLDER, ARCHIVE_FOLDER, SESSION_PATTERN, read_session_messages
 
 def _write_tar(path, messages):
 	tmp_path = path + ".tmp"

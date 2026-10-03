@@ -5,7 +5,9 @@
 	--table-border: #dddddd;
 	--table-th-text: #222222;
 	--table-th-bg: #f0f0f0;
+	--prompt-bg: #f5f5f5;
 	--prompt-text: #b8960f;
+	--pre-bg: #f5f5f5;
 	--reasoning-text: #6666cc;
 	--error-bg: #c0392b;
 	--error-text: #ffffff;
@@ -30,7 +32,9 @@
 		--table-border: #444444;
 		--table-th-text: #e0e0e0;
 		--table-th-bg: #2c2c2c;
+		--prompt-bg: #242424;
 		--prompt-text: #e5c34a;
+		--pre-bg: #242424;
 		--reasoning-text: #7ba8d4;
 		--error-bg: #7a2a20;
 		--error-text: #ffffff;
@@ -116,11 +120,10 @@ nav a.active {
 .message {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
 }
 
 .prompt {
-	background: var(--card-bg);
+	background: var(--prompt-bg);
 	padding: 10px;
 	border-radius: 4px;
 	color: var(--prompt-text);
@@ -161,6 +164,64 @@ nav a.active {
 
 .prompt, .reasoning, .tool, .error, .response {
 	cursor: pointer;
+	margin-bottom: 10px;
+	position: relative;
+	padding-right: 36px;
+	}
+
+.tool {
+	margin-bottom: 2px;
+	}
+
+.tool.static {
+	cursor: default;
+	}
+
+.info-model {
+	margin-bottom: 0;
+	}
+
+.info-usage {
+	margin-bottom: 10px;
+	}
+
+.prompt > .action,
+.reasoning > .action,
+.tool > .action,
+.error > .action,
+.response > .action {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	color: inherit;
+	}
+
+.prompt.collapsed .content,
+.reasoning.collapsed .content,
+.response.collapsed .content,
+.error.collapsed .content,
+.tool.collapsed .content {
+	height: 1.4em;
+	line-height: 1.4;
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 25vw), transparent 100%);
+	mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 25vw), transparent 100%);
+	}
+
+.prompt.collapsed .content > *,
+.reasoning.collapsed .content > *,
+.response.collapsed .content > *,
+.error.collapsed .content > *,
+.tool.collapsed .content > * {
+	margin: 0;
+	}
+
+.prompt.collapsed > .action,
+.reasoning.collapsed > .action,
+.response.collapsed > .action,
+.error.collapsed > .action,
+.tool.collapsed > .action {
+	display: none;
 	}
 
 .chatbox .action svg {
@@ -227,6 +288,11 @@ nav a.active {
 	cursor: pointer;
 	user-select: none;
 	color: var(--action);
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	}
 
 .action svg {
@@ -236,6 +302,12 @@ nav a.active {
 
 .action.enabled {
 	color: var(--enabled);
+	}
+
+.action[disabled] {
+	opacity: 0.3;
+	cursor: default;
+	pointer-events: none;
 	}
 
 #mode-toggle[data-mode="auto"] {
@@ -283,7 +355,7 @@ nav a.active {
 	display: none;
 	}
 
-.message.hidden {
+.message.hidden > :not(.action) {
 	display: none;
 	}
 
@@ -316,16 +388,6 @@ button {
 	cursor: pointer;
 	}
 
-.chatbox .action {
-	height: 42px;
-	margin: 0;
-	padding: 0 16px;
-	font-size: 1.1rem;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	}
-
 .chatbox select {
 	font-size: 0.9em;
 	width: 100%;
@@ -348,12 +410,13 @@ button {
 
 pre {
 	font-size: 80%;
-	background-color: var(--card-bg);
+	background-color: var(--pre-bg);
 	max-width: 100%;
-	overflow-x: auto;
-	white-space: pre;
+	white-space: pre-wrap;
+	word-wrap: break-word;
 	box-sizing: border-box;
-	-webkit-overflow-scrolling: touch;
+	padding: 10px;
+	border-radius: 4px;
 	}
 
 h1 {

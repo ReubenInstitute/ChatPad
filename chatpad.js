@@ -73,15 +73,22 @@ class Session {
 		this.messages = json.messages.map(m => new Message(m, this))
 	}
 
-	resume(permission) {
-		fetch(`/api/sessions/${this.uuid}/resume`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ permission }),
-		})
+	// action is omitted for a plain continue-after-pause, or 'approve'/'deny'/'stop'
+	// to resolve a pending tool-call approval. formData carries the chatbox's
+	// current model/tools/mode/reasoning, read fresh at the moment of the click.
+	resume(action, formData) {
+		this.status = action === 'stop' ? 'idle' : 'busy'
+		if (action) formData.set('action', action)
+		fetch(`/api/sessions/${this.uuid}/resume`, { method: 'POST', body: formData })
+	}
+
+	pause() {
+		this.status = 'paused'
+		fetch(`/api/sessions/${this.uuid}/pause`, { method: 'POST' })
 	}
 
 	stop() {
+		this.status = 'idle'
 		fetch(`/api/sessions/${this.uuid}/stop`, { method: 'POST' })
 	}
 }
@@ -120,12 +127,18 @@ class SessionView {
 		this.collapseAllButLast()
 	}
 
-	// At any point, only the single last turn of the single last message stays
-	// expanded - everything earlier is collapsed to one line, so scrolling back
-	// through history never means scrolling through full text.
+	// At any point, only the single last message stays fully expanded -
+	// everything earlier is collapsed to one line, so scrolling back through
+	// history never means scrolling through full text. Tool blocks are not
+	// touched here - they always start and stay collapsed by default,
+	// regardless of which message they're in, and only expand on click.
 	collapseAllButLast() {
-		const blocks = Array.from(this.container.querySelectorAll('.prompt, .reasoning, .tool, .error, .response'))
-		blocks.forEach((el, i) => el.classList.toggle('collapsed', i !== blocks.length - 1))
+		const messages = Array.from(this.container.querySelectorAll('.message'))
+		const lastMessage = messages[messages.length - 1]
+		messages.forEach(message => {
+			const blocks = message.querySelectorAll('.prompt, .reasoning, .error, .response')
+			blocks.forEach(el => el.classList.toggle('collapsed', message !== lastMessage))
+		})
 	}
 }
 
@@ -183,17 +196,24 @@ class MessageView {
 			this.insertDirectChild(model)
 		}
 		model.innerHTML = ''
-		if (turn.icon) {
+		const [provider, , rest] = turn.model.includes('/') ? turn.model.split(/\/(.*)/) : [null, null, null]
+		const slug = provider === 'local' ? 'qwen' : (rest ? rest.split('/')[0].replace(/^~/, '') : null)
+		const icon = slug ? MODEL_ICONS[slug] : null
+		if (icon) {
 			const img = document.createElement('img')
-			img.src = turn.icon
+			img.src = icon
 			img.alt = ''
 			model.appendChild(img)
 		}
+		const modelInfo = models.find(m => m.id === turn.model)
 		const small = document.createElement('small')
-		small.textContent = turn.model_name || turn.model
+		small.textContent = (modelInfo && modelInfo.name) || turn.model
 		model.appendChild(small)
 
-		if (!turn.usage) return
+		const inputTokens = this.message.input_tokens
+		const outputTokens = this.message.output_tokens
+		const contextLength = modelInfo && modelInfo.context_length
+		if (!inputTokens && !outputTokens && !contextLength) return
 		let usage = this.directChild('info-usage')
 		if (!usage) {
 			usage = document.createElement('div')
@@ -201,11 +221,11 @@ class MessageView {
 			this.insertDirectChild(usage)
 		}
 		const parts = []
-		if (turn.usage.prompt_tokens) parts.push('Input: ' + turn.usage.prompt_tokens)
-		if (turn.usage.completion_tokens) parts.push('Output: ' + turn.usage.completion_tokens)
-		if (turn.context_length) {
-			let max = 'Max: ' + formatNumber(turn.context_length)
-			if (turn.usage.prompt_tokens) max += ' (' + (turn.usage.prompt_tokens / turn.context_length * 100).toFixed(1) + '%)'
+		if (inputTokens) parts.push('Input: ' + inputTokens)
+		if (outputTokens) parts.push('Output: ' + outputTokens)
+		if (contextLength) {
+			let max = 'Max: ' + formatNumber(contextLength)
+			if (inputTokens) max += ' (' + (inputTokens / contextLength * 100).toFixed(1) + '%)'
 			parts.push(max)
 		}
 		usage.innerHTML = ''
@@ -215,13 +235,21 @@ class MessageView {
 	}
 
 	drawHideAction() {
-		if (this.directChild('action')) return
-		const action = document.createElement('span')
-		action.className = 'action'
-		action.title = 'Hide from history'
-		action.innerHTML = '<i data-lucide="eye-off"></i>'
-		action.onclick = () => this.container.classList.contains('hidden') ? this.unhide() : this.hide()
-		this.container.appendChild(action)
+		let action = this.directChild('action')
+		if (!action) {
+			action = document.createElement('span')
+			action.className = 'action'
+			action.onclick = () => this.container.classList.contains('hidden') ? this.unhide() : this.hide()
+			this.container.appendChild(action)
+			if (this.message.hidden) this.container.classList.add('hidden')
+		}
+		this.updateHideAction(action)
+	}
+
+	updateHideAction(action) {
+		const hidden = this.container.classList.contains('hidden')
+		action.title = hidden ? 'Show in history' : 'Hide from history'
+		action.innerHTML = `<i data-lucide="${hidden ? 'eye-off' : 'eye'}"></i>`
 		iconify(this.container)
 	}
 
@@ -230,11 +258,13 @@ class MessageView {
 	// exactly like a Chatbox setting - the write is the save.
 	hide() {
 		this.container.classList.add('hidden')
+		this.updateHideAction(this.directChild('action'))
 		fetch(`/api/sessions/${this.message.session.uuid}/messages/${this.message.uuid}/hide`, { method: 'POST' })
 	}
 
 	unhide() {
 		this.container.classList.remove('hidden')
+		this.updateHideAction(this.directChild('action'))
 		fetch(`/api/sessions/${this.message.session.uuid}/messages/${this.message.uuid}/unhide`, { method: 'POST' })
 	}
 }
@@ -322,19 +352,10 @@ class ToolTurnView {
 
 	draw() {
 		this.container.className = 'tool'
-		this.container.onclick = () => toggleCollapsed(this.container)
 
 		const content = document.createElement('div')
 		content.className = 'content'
 		this.container.appendChild(content)
-
-		const action = document.createElement('span')
-		action.className = 'action'
-		action.title = 'Copy'
-		action.innerHTML = '<i data-lucide="copy"></i>'
-		action.onclick = (e) => { e.stopPropagation(); this.copy(action) }
-		this.container.appendChild(action)
-		iconify(this.container)
 
 		this.update()
 	}
@@ -346,17 +367,93 @@ class ToolTurnView {
 		navigator.clipboard.writeText(clone.textContent.trim())
 	}
 
+	// The label every tool shows on its first line - verb plus the argument
+	// that matters, written out by name. Each one of our tools is named here;
+	// there is no table standing in for this knowledge.
+	label() {
+		const args = JSON.parse(this.turn.arguments || '{}')
+		switch (this.turn.tool) {
+			case 'read_file': return `read ${args.path}`
+			case 'write_file': return `write ${args.path}`
+			case 'edit_file': return `edit ${args.path}`
+			case 'append_file': return `append ${args.path}`
+			case 'rename_file': return `rename ${args.path} to ${args.new_path}`
+			case 'copy_file': return `copy ${args.path} to ${args.new_path}`
+			case 'get_url': return `get ${args.url}`
+			case 'download_url': return `download ${args.url} to ${args.path}`
+			case 'delete_file': return `delete ${args.path}`
+			case 'current_time': return 'current time'
+			case 'calculator': return `calculate ${args.expression}`
+			case 'todo': return 'todo'
+			case 'run_python': return 'run python'
+			case 'run_command': return `run ${args.command}`
+			case 'make_folder': return `make folder ${args.path}`
+			case 'remove_folder': return `remove folder ${args.path}`
+			case 'light_status': return 'light status'
+			case 'light_on': return 'turn light on'
+			case 'light_off': return 'turn light off'
+			default: return this.turn.tool
+		}
+	}
+
+	// The second line, shown only when there's something to show. Each tool
+	// is named here explicitly: read/get/download/calculator/todo/run_python/
+	// run_command/light_status show their result; write/edit/append show the
+	// argument being written. rename, copy, delete, make_folder, remove_folder,
+	// light_on, light_off have nothing beyond "it happened" and are left out.
+	contentText() {
+		if (this.turn.result && this.turn.result.error) return this.turn.result.error.message
+		const args = JSON.parse(this.turn.arguments || '{}')
+		switch (this.turn.tool) {
+			case 'write_file': return args.content
+			case 'edit_file': return args.new
+			case 'append_file': return args.content
+			case 'read_file':
+			case 'get_url':
+			case 'download_url':
+			case 'current_time':
+			case 'calculator':
+			case 'todo':
+			case 'run_python':
+			case 'run_command':
+			case 'light_status':
+				return this.turn.result ? this.turn.result.content : null
+			default:
+				return null
+		}
+	}
+
 	update() {
 		this.container.classList.toggle('error', !!(this.turn.result && this.turn.result.error))
 		const content = this.container.querySelector('.content')
 		content.innerHTML = ''
 		const summary = document.createElement('div')
-		summary.textContent = this.turn.tool
+		summary.textContent = this.label()
 		content.appendChild(summary)
-		if (this.turn.result && this.turn.result.content) {
+		const text = this.contentText()
+		this.container.classList.toggle('static', !text)
+		if (text) {
 			const result = document.createElement('div')
-			result.textContent = this.turn.result.content
+			result.textContent = text
 			content.appendChild(result)
+			if (!this.container.onclick) {
+				this.container.classList.add('collapsed')
+				this.container.onclick = () => toggleCollapsed(this.container)
+			}
+			if (!this.container.querySelector('.action')) {
+				const action = document.createElement('span')
+				action.className = 'action'
+				action.title = 'Copy'
+				action.innerHTML = '<i data-lucide="copy"></i>'
+				action.onclick = (e) => { e.stopPropagation(); this.copy(action) }
+				this.container.appendChild(action)
+				iconify(this.container)
+			}
+		} else {
+			this.container.classList.remove('collapsed')
+			this.container.onclick = null
+			const action = this.container.querySelector('.action')
+			if (action) action.remove()
 		}
 	}
 }
@@ -369,19 +466,54 @@ function toggleCollapsed(container) {
 // fetch_url was split into get_url and download_url
 const LEGACY_TOOLS = { 'fetch_url': ['get_url', 'download_url'] }
 
+// Session is a single global (see `let session` below); Chatbox never stores
 class Chatbox {
-	constructor(container, session) {
+	constructor(container) {
 		this.container = container
-		this.session = session
+	}
+
+	// The one slot next to the textarea: Send alone when idle or paused (where
+	// it means Resume), Stop+Pause while busy, Send-but-disabled while awaiting
+	// a pending tool-call approval. Always reflects session.status right away -
+	// never waits on a network round trip to decide what it shows.
+	set status(value) {
+		const slot = this.container.querySelector('.chatbox-input > div')
+		slot.innerHTML = ''
+		if (value === 'busy') {
+			const stop = document.createElement('div')
+			stop.className = 'action'
+			stop.title = 'Stop'
+			stop.innerHTML = '<i data-lucide="square"></i>'
+			stop.onclick = () => { session.stop(); this.status = session.status }
+			slot.appendChild(stop)
+
+			const pause = document.createElement('div')
+			pause.className = 'action'
+			pause.title = 'Pause'
+			pause.innerHTML = '<i data-lucide="pause"></i>'
+			pause.onclick = () => { session.pause(); this.status = session.status }
+			slot.appendChild(pause)
+		} else {
+			const send = document.createElement('div')
+			send.className = 'action'
+			send.title = value === 'paused' ? 'Resume' : 'Send'
+			send.innerHTML = '<i data-lucide="send"></i>'
+			if (value === 'awaiting') send.setAttribute('disabled', '')
+			else send.onclick = () => document.getElementById('chat-form').requestSubmit()
+			slot.appendChild(send)
+		}
+		iconify(slot)
 	}
 
 	init() {
-		this.tools = this.session.settings.tools || []
-		this.think = this.session.settings.think == null ? true : this.session.settings.think
-		this.mode = this.session.settings.mode || 'auto'
-		if (this.session.settings.model) this.model = this.session.settings.model
-		if (this.session.settings.system_model) this.system_model = this.session.settings.system_model
-		this.archived = this.session.archived
+		if (!session) return
+		this.status = session.status || 'idle'
+		this.tools = session.settings.tools || []
+		this.think = session.settings.think == null ? true : session.settings.think
+		this.mode = session.settings.mode || 'auto'
+		if (session.settings.model) this.model = session.settings.model
+		if (session.settings.system_model) this.system_model = session.settings.system_model
+		this.archived = session.archived
 	}
 
 	toggleModelList() {
@@ -445,8 +577,10 @@ class Chatbox {
 			el.classList.toggle('enabled', on)
 			input.disabled = !on
 		})
-		this.session.settings.tools = Array.from(wanted)
-		this.session.settings.save()
+		if (session) {
+			session.settings.tools = Array.from(wanted)
+			session.settings.save()
+		}
 	}
 
 	toggleReasoning(el) {
@@ -464,8 +598,10 @@ class Chatbox {
 			el.classList.toggle('enabled', value)
 			el.nextElementSibling.disabled = !value
 		}
-		this.session.settings.think = value
-		this.session.settings.save()
+		if (session) {
+			session.settings.think = value
+			session.settings.save()
+		}
 	}
 
 	selectModel(el) {
@@ -486,8 +622,10 @@ class Chatbox {
 		}
 		this.container.querySelector('[name="model"]').value = value
 		this.container.querySelector('#model-menu').classList.add('hidden')
-		this.session.settings.model = value
-		this.session.settings.save()
+		if (session) {
+			session.settings.model = value
+			session.settings.save()
+		}
 	}
 
 	selectSystemModel(el) {
@@ -509,8 +647,10 @@ class Chatbox {
 			link.classList.remove('hidden')
 		}
 		this.container.querySelector('#system-model-menu').classList.add('hidden')
-		this.session.settings.system_model = value
-		this.session.settings.save()
+		if (session) {
+			session.settings.system_model = value
+			session.settings.save()
+		}
 	}
 
 	toggleMode(el) {
@@ -526,33 +666,35 @@ class Chatbox {
 		const el = this.container.querySelector('#mode-toggle')
 		if (el) {
 			el.dataset.mode = value
-			el.classList.toggle('enabled', value === 'manual')
 			el.title = value === 'manual' ? 'Manual: approve each tool call' : 'Auto: tools run without approval'
 		}
 		this.container.querySelector('[name="mode"]').value = value
-		this.session.settings.mode = value
-		this.session.settings.save()
+		if (session) {
+			session.settings.mode = value
+			session.settings.save()
+		}
 	}
 
 	toggleArchive() {
+		if (!session) return
 		this.archived = !this.archived
 	}
 
 	get archived() {
-		return this.session.archived
+		return session ? session.archived : false
 	}
 
 	set archived(value) {
-		this.session.archived = value
+		session.archived = value
 		const el = this.container.querySelector('#archive-toggle')
 		if (el) el.innerHTML = value ? '<i data-lucide="archive-restore"></i>' : '<i data-lucide="trash-2"></i>'
 		this.container.classList.toggle('archived', value)
 		iconify(this.container)
-		fetch(`/api/sessions/${this.session.uuid}/${value ? 'archive' : 'unarchive'}`, { method: 'POST' })
+		fetch(`/api/sessions/${session.uuid}/${value ? 'archive' : 'unarchive'}`, { method: 'POST' })
 	}
 
 	refreshModels() {
-		fetch('/api/refresh-models', { method: 'POST' }).then(() => location.reload())
+		fetch('/api/models').then(() => location.reload())
 	}
 }
 
@@ -587,10 +729,24 @@ function ensureMessagesContainer() {
 	return el
 }
 
+function showPermissionBox() {
+	if (permissionBox) return
+	const template = document.getElementById('permission-template')
+	permissionBox = template.content.firstElementChild.cloneNode(true)
+	permissionBox.querySelectorAll('button').forEach(button => {
+		button.onclick = () => {
+			session.resume(button.dataset.action, new FormData(document.getElementById('chat-form')))
+			chatbox.status = session.status
+		}
+	})
+	ensureMessagesContainer().appendChild(permissionBox)
+}
+
 let session = null
 let liveSessionView = null
 let chatbox = null
 let permissionBox = null
+let models = []
 
 function startLiveTurn(record) {
 	session.messages.push(new Message({ uuid: record.uuid, hidden: false, turns: [] }, session))
@@ -612,11 +768,6 @@ function applyPatch(turn, target, patchText) {
 	turn[target] = newHtml
 }
 
-function toolLabel(record, call) {
-	const labels = record.labels || {}
-	return labels[call.id] || `${call.function.name}(${call.function.arguments})`
-}
-
 async function renderMarkdown(text) {
 	const response = await fetch('/api/markdown', { method: 'POST', body: new URLSearchParams({ text }) })
 	return response.text()
@@ -625,7 +776,8 @@ async function renderMarkdown(text) {
 async function handleStreamRecord(record) {
 	if (record.type === 'status') {
 		session.status = record.status
-		if (permissionBox) { permissionBox.remove(); permissionBox = null }
+		chatbox.status = record.status
+		if (permissionBox && record.status !== 'awaiting') { permissionBox.remove(); permissionBox = null }
 		return
 	}
 	if (record.type === 'prompt') {
@@ -633,23 +785,24 @@ async function handleStreamRecord(record) {
 		currentMessage().turns.push(new MessageTurn({ prompt: record.content }, currentMessage()))
 	} else if (!session || !session.messages.length) {
 		return
-	} else if (record.type === 'html_patch') {
-		applyPatch(currentTurn(), record.target, record.patch)
-	} else if (record.type === 'reasoning') {
-		currentTurn().reasoning = await renderMarkdown(record.content)
-	} else if (record.type === 'response') {
-		if (record.content) currentTurn().response = await renderMarkdown(record.content)
-		if (record.model) currentTurn().model = record.model
-		if (record.model_name) currentTurn().model_name = record.model_name
-		if (record.icon) currentTurn().icon = record.icon
-		if (record.usage) currentTurn().usage = record.usage
-		if (record.context_length) currentTurn().context_length = record.context_length
+	} else if (record.type === 'html_patch' || record.type === 'reasoning' || record.type === 'response') {
+		if (!(currentTurn() instanceof MessageTurn)) currentMessage().turns.push(new MessageTurn({}, currentMessage()))
+		if (record.type === 'html_patch') applyPatch(currentTurn(), record.target, record.patch)
+		else if (record.type === 'reasoning') currentTurn().reasoning = await renderMarkdown(record.content)
+		else {
+			if (record.content) currentTurn().response = await renderMarkdown(record.content)
+			if (record.model) currentTurn().model = record.model
+			if (record.usage) {
+				currentMessage().input_tokens = record.usage.prompt_tokens
+				currentMessage().output_tokens = record.usage.completion_tokens
+			}
+		}
 	} else if (record.type === 'error') {
 		currentTurn().error = record.error
 	} else if (record.type === 'tool_call') {
 		record.tool_calls.forEach(call => {
 			currentMessage().turns.push(new ToolTurn({
-				tool: toolLabel(record, call),
+				tool: call.function.name,
 				arguments: call.function.arguments,
 				result: null,
 				call_id: call.id,
@@ -660,23 +813,18 @@ async function handleStreamRecord(record) {
 		if (turn) turn.result = { content: record.content, error: record.error }
 	} else if (record.type === 'await_approval') {
 		session.status = 'awaiting'
-		permissionBox = document.createElement('div')
-		permissionBox.className = 'permissionbox'
-		;[['Accept', () => session.resume(true)], ['Deny', () => session.resume(false)], ['Stop', () => session.stop()]].forEach(([label, action]) => {
-			const button = document.createElement('button')
-			button.type = 'button'
-			button.textContent = label
-			button.onclick = action
-			permissionBox.appendChild(button)
-		})
-		ensureMessagesContainer().appendChild(permissionBox)
+		chatbox.status = 'awaiting'
+		showPermissionBox()
 	}
 	liveSessionView.update()
 	scrollIfAtBottom()
 }
 
-async function openLiveStream() {
-	const response = await fetch(`/api/sessions/${session.uuid}/stream`)
+async function openLiveStream(afterUuid) {
+	const url = afterUuid
+		? `/api/sessions/${session.uuid}/stream?uuid=${afterUuid}`
+		: `/api/sessions/${session.uuid}/stream`
+	const response = await fetch(url)
 	const reader = response.body.getReader()
 	const decoder = new TextDecoder()
 	let buffer = ''
@@ -688,15 +836,28 @@ async function openLiveStream() {
 		buffer = parts.pop()
 		for (const part of parts) {
 			if (!part.startsWith('data: ')) continue
-			await handleStreamRecord(JSON.parse(part.slice(6)))
+			try {
+				await handleStreamRecord(JSON.parse(part.slice(6)))
+			} catch (e) {
+				console.error('live record failed, continuing stream:', e)
+			}
 		}
 	}
 }
 
 async function submitLiveChat(event) {
 	event.preventDefault()
+	if (session && session.status === 'awaiting') return
 	const form = event.currentTarget
 	const formData = new FormData(form)
+
+	if (session && session.status === 'paused') {
+		session.status = 'busy'
+		chatbox.status = 'busy'
+		fetch(`/api/sessions/${session.uuid}/resume`, { method: 'POST', body: formData })
+		return
+	}
+
 	const promptEl = form.querySelector('textarea[name="prompt"]')
 	promptEl.value = ''
 
@@ -704,12 +865,20 @@ async function submitLiveChat(event) {
 	const response = await fetch(url, { method: 'POST', body: formData })
 	const ack = await response.json()
 	if (!session) {
-		session = new Session({ uuid: ack.session, archived: false, status: 'idle', settings: {}, messages: [] })
+		session = new Session({ uuid: ack.session, archived: false, status: 'busy', settings: {}, messages: [] })
 		liveSessionView = new SessionView(ensureMessagesContainer(), session)
-		chatbox = new Chatbox(document.querySelector('.chatbox'), session)
-		chatbox.init()
+		session.settings.model = chatbox.model
+		session.settings.system_model = chatbox.system_model
+		session.settings.tools = chatbox.tools
+		session.settings.mode = chatbox.mode
+		session.settings.think = chatbox.think
+		session.settings.save()
+		chatbox.status = 'busy'
 		history.pushState(null, '', `/chat/${ack.session}`)
 		openLiveStream()
+	} else {
+		session.status = 'busy'
+		chatbox.status = 'busy'
 	}
 }
 
@@ -718,13 +887,18 @@ async function init() {
 	if (!form) return
 	const sessionId = form.dataset.sessionId || null
 	form.addEventListener('submit', submitLiveChat)
+	chatbox = new Chatbox(document.querySelector('.chatbox'))
 	if (!sessionId) return
+	models = await (await fetch('/api/models')).json()
 	const json = await (await fetch(`/api/sessions/${sessionId}`)).json()
 	session = new Session(json)
 	liveSessionView = new SessionView(ensureMessagesContainer(), session)
-	chatbox = new Chatbox(document.querySelector('.chatbox'), session)
+	liveSessionView.draw()
 	chatbox.init()
-	openLiveStream()
+	if (session.status === 'awaiting') showPermissionBox()
+	const lastMessage = session.messages[session.messages.length - 1]
+	const lastTurn = lastMessage && lastMessage.turns[lastMessage.turns.length - 1]
+	openLiveStream(lastTurn ? lastTurn.uuid : null)
 }
 
 document.addEventListener('DOMContentLoaded', async function() {

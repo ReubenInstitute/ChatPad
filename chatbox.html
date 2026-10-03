@@ -7,10 +7,10 @@
     <div class="menu hidden" id="system-model-menu">
         <div class="action" onclick="chatbox.toggleSystemModelList()"><i data-lucide="x"></i></div>
         <div onclick="chatbox.toggleSystemModelList()">Models</div>
-        <div data-id="" data-name="none" onclick="chatbox.selectSystemModel(this)">none</div>
+        <div class="model-toggle" data-id="" data-name="none" onclick="chatbox.selectSystemModel(this)">none</div>
         {% for model in MODELS %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectSystemModel(this)">{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div class="model-toggle" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectSystemModel(this)">{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
     </div>
 </div>
@@ -18,7 +18,7 @@
 <form id="chat-form" data-session-id="{{ session_id or '' }}" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
     <div class="chatbox-input">
         <textarea name="prompt" rows="2" placeholder="Message" required style="background: transparent;"></textarea>
-        <div id="send-controls">
+        <div>
             <div class="action" title="Send" onclick="document.getElementById('chat-form').requestSubmit()"><i data-lucide="send"></i></div>
         </div>
     </div>
@@ -28,26 +28,26 @@
         <div>OpenRouter</div>
         {% for model in MODELS if model.id.split('/')[0] == 'openrouter' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div class="model-toggle" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
 
         <div>DeepSeek</div>
         {% for model in MODELS if model.id.split('/')[0] == 'deepseek' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div class="model-toggle" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
 
         <div>Local</div>
         {% for model in MODELS if model.id.split('/')[0] == 'local' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div class="model-toggle" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
     </div>
 
     <div class="menu hidden" id="tools-menu">
         <div class="action" onclick="chatbox.toggleToolsList()"><i data-lucide="x"></i></div>
         {% for tool in TOOLS %}
-            <div data-name="{{ tool.function.name }}" onclick="chatbox.toggleTool(this)">{{ tool.function.name }}</div>
+            <div class="tool-toggle" data-name="{{ tool.function.name }}" onclick="chatbox.toggleTool(this)">{{ tool.function.name }}</div>
             <input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
         {% endfor %}
     </div>
@@ -56,11 +56,11 @@
         <div id="model-link" onclick="chatbox.toggleModelList()"><img src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
         <input type="hidden" name="model" value="{{ selected_id }}">
 
-        <div class="action" id="reasoning-toggle" data-name="reasoning" data-enabled onclick="chatbox.toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
+        <div class="action enabled" id="reasoning-toggle" data-name="reasoning" onclick="chatbox.toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
         <input type="hidden" name="reasoning" value="1">
 
-        <div class="action" id="mode-toggle" data-mode="auto" onclick="chatbox.toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="shield-check"></i></div>
-        <input type="hidden" name="mode" value="auto">
+        <div class="action" id="mode-toggle" data-mode="manual" onclick="chatbox.toggleMode(this)" title="Manual: approve each tool call"><i data-lucide="shield-check"></i></div>
+        <input type="hidden" name="mode" value="manual">
 
         <div class="action" id="tools-button" onclick="chatbox.toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
 

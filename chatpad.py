@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta
 import os
 import re
+import threading
 import uuid
 import uuid7
 import json
@@ -274,7 +275,7 @@ class Session:
 			with open(self.status_path) as f:
 				data = json.load(f)
 		data[key] = value
-		tmp = self.status_path + ".tmp"
+		tmp = self.status_path + "." + str(threading.get_ident()) + ".tmp"
 		with open(tmp, "w") as f:
 			json.dump(data, f)
 		os.replace(tmp, self.status_path)

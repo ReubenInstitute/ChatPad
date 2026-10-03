@@ -3,6 +3,15 @@
 {% block title %}Archive{% endblock %}
 
 {% block content %}
-	{% include "sessions.html" %}
-
+<div id="sessions-table">
+{% for day, group in sessions %}
+	<h3>{{ day|format_day }}</h3>
+	{% for s_id, timestamp, title in group %}
+	<div class="session-row">
+		<span class="session-time">{{ timestamp|format_hm }}</span>
+		<a href="/chat/{{ s_id }}">{{ title }}</a>
+	</div>
+	{% endfor %}
+{% endfor %}
+</div>
 {% endblock %}
