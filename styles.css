@@ -283,6 +283,13 @@ nav a.active {
 	display: none;
 	}
 
+.message.hidden {
+	display: none;
+	}
+
+.permissionbox {
+	}
+
 .menu > div {
 	cursor: pointer;
 	padding: 2px 0;

@@ -1,17 +1,16 @@
-{% if not archived %}
 {% set selected_id = default_model or MODELS[0].id %}
 {% set selected_icon = model_icon_url(icons, selected_id) %}
 <div class="chatbox">
 
 <div class="chatbox-top">
-    <div id="system-model-link" onclick="toggleSystemModelList()"><img src="" alt="" hidden><span>none</span></div>
+    <div id="system-model-link" onclick="chatbox.toggleSystemModelList()"><img src="" alt="" hidden><span>none</span></div>
     <div class="menu hidden" id="system-model-menu">
-        <div class="action" onclick="toggleSystemModelList()"><i data-lucide="x"></i></div>
-        <div onclick="toggleSystemModelList()">Models</div>
-        <div data-id="" data-name="none" onclick="selectSystemModel(this)">none</div>
+        <div class="action" onclick="chatbox.toggleSystemModelList()"><i data-lucide="x"></i></div>
+        <div onclick="chatbox.toggleSystemModelList()">Models</div>
+        <div data-id="" data-name="none" onclick="chatbox.selectSystemModel(this)">none</div>
         {% for model in MODELS %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectSystemModel(this)">{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectSystemModel(this)">{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
     </div>
 </div>
@@ -25,48 +24,49 @@
     </div>
 
     <div class="menu hidden" id="model-menu">
-        <div class="action" onclick="toggleModelList()"><i data-lucide="x"></i></div>
+        <div class="action" onclick="chatbox.toggleModelList()"><i data-lucide="x"></i></div>
         <div>OpenRouter</div>
         {% for model in MODELS if model.id.split('/')[0] == 'openrouter' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
 
         <div>DeepSeek</div>
         {% for model in MODELS if model.id.split('/')[0] == 'deepseek' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
 
         <div>Local</div>
         {% for model in MODELS if model.id.split('/')[0] == 'local' %}
             {% set icon = model_icon_url(icons, model.id) %}
-            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
+            <div data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="chatbox.selectModel(this)"{% if model.id == selected_id %} data-selected{% endif %}>{% if icon %}<img src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
         {% endfor %}
     </div>
 
     <div class="menu hidden" id="tools-menu">
-        <div class="action" onclick="toggleToolsList()"><i data-lucide="x"></i></div>
+        <div class="action" onclick="chatbox.toggleToolsList()"><i data-lucide="x"></i></div>
         {% for tool in TOOLS %}
-            <div data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>
+            <div data-name="{{ tool.function.name }}" onclick="chatbox.toggleTool(this)">{{ tool.function.name }}</div>
             <input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
         {% endfor %}
     </div>
 
     <div class="chatbox-controls">
-        <div id="model-link" onclick="toggleModelList()"><img src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
+        <div id="model-link" onclick="chatbox.toggleModelList()"><img src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
         <input type="hidden" name="model" value="{{ selected_id }}">
 
-        <div class="action" id="reasoning-toggle" data-name="reasoning" data-enabled onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
+        <div class="action" id="reasoning-toggle" data-name="reasoning" data-enabled onclick="chatbox.toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
         <input type="hidden" name="reasoning" value="1">
 
-        <div class="action" id="mode-toggle" data-mode="auto" onclick="toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="shield-check"></i></div>
+        <div class="action" id="mode-toggle" data-mode="auto" onclick="chatbox.toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="shield-check"></i></div>
         <input type="hidden" name="mode" value="auto">
 
-        <div class="action" id="tools-button" onclick="toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
+        <div class="action" id="tools-button" onclick="chatbox.toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
 
-        <div class="action" id="refresh-button" onclick="refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
+        <div class="action" id="refresh-button" onclick="chatbox.refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
+
+        <div class="action" id="archive-toggle" onclick="chatbox.toggleArchive()" title="Archive"><i data-lucide="trash-2"></i></div>
     </div>
 </form>
 </div>
-{% endif %}
