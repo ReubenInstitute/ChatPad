@@ -1,6 +1,10 @@
 import os
 import json
-from datetime import datetime
+import threading
+import queue
+import uuid7
+from collections import defaultdict
+from datetime import datetime, timezone
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
 from chat import Chat, Session, Turn, NO_CONTENT_TOOLS, tool_summary
 import re
@@ -8,6 +12,13 @@ from rotate_keys import rotate
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 chat = Chat()
+stop_requested = set()
+pause_requested = set()
+subscribers = defaultdict(list)
+
+def broadcast(session_id, record):
+	for q in list(subscribers.get(session_id, [])):
+		q.put(record)
 
 
 def find_tool_result(turn, tool_call_id):
@@ -198,7 +209,7 @@ def models_view():
 
 @app.route('/')
 def main():
-	return render_template('main.html')
+	return render_template('main.html', icons=model_icons())
 
 @app.route('/archive')
 def archive():
@@ -262,6 +273,109 @@ def api_models():
 def api_sessions():
 	return jsonify(chat.list())
 
+@app.route('/API/models')
+def API_models():
+	chat.openrouter.load_models()
+	chat.deepseek.load_models()
+	chat.local.load_models()
+	result = []
+	for m in chat.free_models:
+		fields = dict(vars(m))
+		fields["provider"] = type(fields["provider"]).__name__
+		result.append(fields)
+	return jsonify(result)
+
+@app.route('/API/sessions/<session_id>/stop', methods=['POST'])
+def API_stop_session(session_id):
+	stop_requested.add(session_id)
+	return jsonify({"uuid": session_id, "stopped": True})
+
+@app.route('/API/sessions/<session_id>/pause', methods=['POST'])
+def API_pause_session(session_id):
+	pause_requested.add(session_id)
+	return jsonify({"uuid": session_id, "paused": True})
+
+@app.route('/API/sessions/<session_id>/resume', methods=['POST'])
+def API_resume_session(session_id):
+	model = request.form.get('model')
+	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
+	session_obj = Session(session_id)
+	session_obj.status = "busy"
+	broadcast(session_id, {"type": "status", "status": "busy", "session": session_id})
+	records = chat.continue_message(session_id, model, reasoning, tools, mode, pause_requested=pause_requested)
+	threading.Thread(target=run_records, args=(records, session_obj), daemon=True).start()
+	return jsonify({"session": session_id})
+
+@app.route('/API/sessions/<session_id>/archive', methods=['POST'])
+def API_archive_session(session_id):
+	Session(session_id).archive()
+	return jsonify({"uuid": session_id, "archived": True})
+
+@app.route('/API/sessions/<session_id>/unarchive', methods=['POST'])
+def API_unarchive_session(session_id):
+	Session(session_id).unarchive()
+	return jsonify({"uuid": session_id, "archived": False})
+
+@app.route('/API/sessions/<session_id>/messages/<uuid>/hide', methods=['POST'])
+def API_hide_message(session_id, uuid):
+	message = next(m for m in Session(session_id).messages if m.uuid == uuid)
+	message.hide()
+	return jsonify({"uuid": uuid, "hidden": True})
+
+@app.route('/API/sessions/<session_id>/messages/<uuid>/unhide', methods=['POST'])
+def API_unhide_message(session_id, uuid):
+	message = next(m for m in Session(session_id).messages if m.uuid == uuid)
+	message.unhide()
+	return jsonify({"uuid": uuid, "hidden": False})
+
+def run_records(records, session_obj):
+	paused = False
+	try:
+		for record in records:
+			if record.get("type") == "paused":
+				paused = True
+			broadcast(session_obj.uuid, record)
+			if session_obj.uuid in stop_requested:
+				stop_requested.discard(session_obj.uuid)
+				records.close()
+				break
+	finally:
+		pause_requested.discard(session_obj.uuid)
+		session_obj.status = "paused" if paused else "idle"
+		broadcast(session_obj.uuid, {"type": "status", "status": session_obj.status, "session": session_obj.uuid})
+
+@app.route('/API/message', methods=['POST'])
+@app.route('/API/sessions/<session_id>/message', methods=['POST'])
+def API_message(session_id=None):
+	prompt = request.form.get('prompt')
+	model = request.form.get('model')
+	reasoning = 'reasoning' in request.form
+	tools = request.form.getlist('tools')
+	mode = request.form.get('mode', 'auto')
+	if session_id is None:
+		session_id = str(uuid7.create(datetime.now(timezone.utc)))
+	session_obj = Session(uuid=session_id)
+	session_obj.status = "busy"
+	broadcast(session_id, {"type": "status", "status": "busy", "session": session_id})
+	records = chat.message(prompt, model, reasoning, session_id, tools, mode, pause_requested=pause_requested)
+	threading.Thread(target=run_records, args=(records, session_obj), daemon=True).start()
+	return jsonify({"session": session_id})
+
+@app.route('/API/sessions/<session_id>/stream')
+def API_stream_session(session_id):
+	q = queue.Queue()
+	subscribers[session_id].append(q)
+	def gen():
+		try:
+			while True:
+				record = q.get()
+				yield f"data: {json.dumps(record)}\n\n"
+		finally:
+			subscribers[session_id].remove(q)
+	return Response(gen(), mimetype='text/event-stream')
+
 @app.route('/API/sessions')
 def API_sessions():
 	return jsonify([{"uuid": uuid, "archived": archived}
@@ -270,7 +384,7 @@ def API_sessions():
 @app.route('/API/sessions/<session_id>')
 def API_session(session_id):
 	session = Session(session_id)
-	return jsonify({"uuid": session.uuid, "archived": session.archived,
+	return jsonify({"uuid": session.uuid, "archived": session.archived, "status": session.status,
 			"messages": [m.to_dict() for m in session.messages]})
 
 @app.route('/api/<session_id>')
@@ -371,4 +485,4 @@ if __name__ == "__main__":
 	# Disable reloader to prevent restart on file changes
 	# Set FLASK_DEBUG=1 to enable debug mode without reloader, or FLASK_RUN_RELOAD=1 to enable reloader
 	use_reloader = os.environ.get("FLASK_RUN_RELOAD", "0") == "1"
-	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True, use_reloader=use_reloader)
+	app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True, use_reloader=use_reloader, threaded=True)

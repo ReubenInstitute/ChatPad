@@ -198,53 +198,56 @@ class Qwen:
 
 		try:
 			response = requests.post(url, json=payload, timeout=(10, Qwen.timeout), stream=True)
-			failure = http_error(response)
-			if failure:
-				yield failure
-				return
-			deadline = time.monotonic() + Qwen.timeout
-			for raw_line in response.iter_lines():
-				if time.monotonic() > deadline:
-					raise TimeoutError(f"no complete reply after {Qwen.timeout} seconds")
-				if not raw_line:
-					continue
-				line = raw_line.decode("utf-8")
-				if not line.startswith("data: "):
-					continue
-				data = line[len("data: "):]
-				if data == "[DONE]":
-					break
-				chunk = json.loads(data)
-				if "error" in chunk:
-					error = chunk["error"]
-					yield {"error": {"message": error.get("message", str(error)), "code": error.get("code")}}
+			try:
+				failure = http_error(response)
+				if failure:
+					yield failure
 					return
-				if chunk.get("usage"):
-					usage = chunk["usage"]
-				choices = chunk.get("choices") or []
-				if not choices:
-					continue
-				choice = choices[0]
-				if choice.get("finish_reason"):
-					finish_reason = choice["finish_reason"]
-				delta = choice.get("delta") or {}
-				if delta.get("reasoning_content"):
-					reasoning_parts.append(delta["reasoning_content"])
-					yield {"delta": "reasoning", "text": delta["reasoning_content"]}
-				if delta.get("content"):
-					content_parts.append(delta["content"])
-					yield {"delta": "content", "text": delta["content"]}
-				if delta.get("tool_calls"):
-					for tc in delta["tool_calls"]:
-						idx = tc.get("index", 0)
-						call = tool_calls.setdefault(idx, {"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
-						if tc.get("id"):
-							call["id"] = tc["id"]
-						fn = tc.get("function") or {}
-						if fn.get("name"):
-							call["function"]["name"] += fn["name"]
-						if fn.get("arguments"):
-							call["function"]["arguments"] += fn["arguments"]
+				deadline = time.monotonic() + Qwen.timeout
+				for raw_line in response.iter_lines():
+					if time.monotonic() > deadline:
+						raise TimeoutError(f"no complete reply after {Qwen.timeout} seconds")
+					if not raw_line:
+						continue
+					line = raw_line.decode("utf-8")
+					if not line.startswith("data: "):
+						continue
+					data = line[len("data: "):]
+					if data == "[DONE]":
+						break
+					chunk = json.loads(data)
+					if "error" in chunk:
+						error = chunk["error"]
+						yield {"error": {"message": error.get("message", str(error)), "code": error.get("code")}}
+						return
+					if chunk.get("usage"):
+						usage = chunk["usage"]
+					choices = chunk.get("choices") or []
+					if not choices:
+						continue
+					choice = choices[0]
+					if choice.get("finish_reason"):
+						finish_reason = choice["finish_reason"]
+					delta = choice.get("delta") or {}
+					if delta.get("reasoning_content"):
+						reasoning_parts.append(delta["reasoning_content"])
+						yield {"delta": "reasoning", "text": delta["reasoning_content"]}
+					if delta.get("content"):
+						content_parts.append(delta["content"])
+						yield {"delta": "content", "text": delta["content"]}
+					if delta.get("tool_calls"):
+						for tc in delta["tool_calls"]:
+							idx = tc.get("index", 0)
+							call = tool_calls.setdefault(idx, {"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
+							if tc.get("id"):
+								call["id"] = tc["id"]
+							fn = tc.get("function") or {}
+							if fn.get("name"):
+								call["function"]["name"] += fn["name"]
+							if fn.get("arguments"):
+								call["function"]["arguments"] += fn["arguments"]
+			finally:
+				response.close()
 		except Exception as e:
 			yield {"error": {"message": f"{type(e).__name__}: {e}", "code": None}}
 			return

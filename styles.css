@@ -62,7 +62,7 @@ main {
 	-webkit-tap-highlight-color: transparent;
 }
 
-.top-sticky {
+.Xtop-sticky {
 	position: sticky;
 	top: 0;
 	z-index: 10;
@@ -70,14 +70,14 @@ main {
 
 nav {
 	background: var(--bar-bg);
-}
-
-.nav-inner {
 	display: flex;
 	width: 100%;
+	position: sticky;
+	top: 0;
+	z-index: 10;
 }
 
-.nav-inner a {
+nav a {
 	flex: 1;
 	text-align: center;
 	padding: 10px 0;
@@ -85,7 +85,7 @@ nav {
 	color: var(--text);
 }
 
-.nav-inner a.active {
+nav a.active {
 	background: var(--text);
 	color: var(--bg);
 }
@@ -93,15 +93,22 @@ nav {
 .session-bar {
 	background: var(--text);
 	padding: 8px 0;
-}
-
-.session-bar-inner {
-	width: min(760px, calc(100% - 40px));
-	box-sizing: border-box;
-	margin: 0 auto;
+	display: flex;
+	justify-content: center;
 	font-size: 0.9rem;
 	font-weight: normal;
 	color: var(--bg);
+}
+
+.session-bar span {
+	width: min(760px, calc(100% - 40px));
+	box-sizing: border-box;
+}
+
+.session {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .message {
@@ -110,7 +117,7 @@ nav {
 	gap: 10px;
 }
 
-.turn-time {
+.Xturn-time {
 	font-size: 0.75rem;
 	color: var(--time-text);
 	margin-right: 0.5em;
@@ -156,7 +163,7 @@ nav {
 }
 
 /* Partial error styling - regular content with error indication */
-.message-error-partial {
+.Xmessage-error-partial {
 	background: var(--card-bg);
 	border-left: 4px solid var(--error-bg);
 	padding: 10px;
@@ -165,7 +172,7 @@ nav {
 	cursor: pointer;
 }
 
-.message-error-partial .error-message {
+.Xmessage-error-partial .Xerror-message {
 	background: var(--error-bg);
 	color: var(--error-text);
 	padding: 8px;
@@ -174,23 +181,23 @@ nav {
 	font-size: 0.75rem;
 }
 
-.message-error-partial .reasoning,
-.message-error-partial .response {
+.Xmessage-error-partial .reasoning,
+.Xmessage-error-partial .response {
 	margin-bottom: 10px;
 }
 
 /* Ensure proper content styling within partial errors */
-.message-error-partial .reasoning {
+.Xmessage-error-partial .reasoning {
 	color: var(--reasoning-text);
 	font-style: italic;
 	font-size: 0.8rem;
 }
 
-.message-error-partial .response {
+.Xmessage-error-partial .response {
 	font-size: 0.85rem;
 }
 
-.message-error-partial .tool {
+.Xmessage-error-partial .tool {
 	margin-bottom: 10px;
 	background: var(--card-bg);
 	padding: 5px 10px;
@@ -198,12 +205,12 @@ nav {
 	font-size: 0.75rem;
 }
 
-.message-error-partial .tool-summary {
+.Xmessage-error-partial .Xtool-summary {
 	font-weight: bold;
 	margin-bottom: 4px;
 }
 
-.message-error-partial .tool-raw {
+.Xmessage-error-partial .Xtool-raw {
 	margin-top: 4px;
 	color: #999;
 	font-size: 0.85em;
@@ -212,7 +219,7 @@ nav {
 }
 
 /* Copy icon should still work */
-.message-error-partial > .copy-icon {
+.Xmessage-error-partial > .Xcopy-icon {
 	display: block;
 	text-align: right;
 	margin-top: 4px;
@@ -222,29 +229,29 @@ nav {
 	cursor: pointer;
 	}
 
-.tool.tool-static {
+.tool.Xtool-static {
 	cursor: default;
 	}
 
-.message .content {
+.message .Xcontent {
 	xoverflow: hidden;
 	transition: max-height 0.3s ease;
 	overflow-wrap: anywhere;
 }
 
-.message .content p {
+.message .Xcontent p {
 	margin: 0;
 }
 
-.message .content p + p {
+.message .Xcontent p + p {
 	margin-top: 0.6em;
 }
 
-.prompt.collapsed .content,
-.reasoning.collapsed .content,
-.response.collapsed .content,
-.error.collapsed .content,
-.tool.collapsed .content {
+.prompt.collapsed .Xcontent,
+.reasoning.collapsed .Xcontent,
+.response.collapsed .Xcontent,
+.error.collapsed .Xcontent,
+.tool.collapsed .Xcontent {
 	height: 1.4em;
 	line-height: 1.4;
 	overflow: hidden;
@@ -252,20 +259,20 @@ nav {
 	mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 25vw), transparent 100%);
 }
 
-.tool.collapsed .tool-summary {
+.tool.collapsed .Xtool-summary {
 	white-space: nowrap;
 	overflow: hidden;
 }
 
-.prompt.collapsed > .copy-icon,
-.reasoning.collapsed > .copy-icon,
-.response.collapsed > .copy-icon,
-.error.collapsed > .copy-icon,
-.tool.collapsed > .copy-icon {
+.prompt.collapsed > .Xcopy-icon,
+.reasoning.collapsed > .Xcopy-icon,
+.response.collapsed > .Xcopy-icon,
+.error.collapsed > .Xcopy-icon,
+.tool.collapsed > .Xcopy-icon {
 	display: none;
 }
 
-.tool-raw {
+.Xtool-raw {
 	margin-top: 4px;
 	color: #999;
 	font-size: 0.85em;
@@ -273,7 +280,7 @@ nav {
 	word-break: normal;
 }
 
-.message .turn-meta {
+.message .Xturn-meta {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
@@ -281,7 +288,7 @@ nav {
 	color: var(--description-text);
 	}
 
-.message .turn-meta .info {
+.message .Xturn-meta .Xinfo {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -291,30 +298,30 @@ nav {
 	color: inherit;
 	}
 
-.message .turn-meta .usage-info {
+.message .Xturn-meta .Xusage-info {
 	margin: 0;
 	padding: 0;
 	font-size: inherit;
 	color: inherit;
 	}
 
-.message-hidden {
+.Xmessage-hidden {
 	opacity: 0.4;
 	}
 
-.message-actions {
+.Xmessage-actions {
 	display: flex;
 	gap: 6px;
 	justify-content: flex-end;
 	}
 
-.copy-icon, .hide-icon {
+.Xcopy-icon, .Xhide-icon {
 	cursor: pointer;
 	opacity: 0.5;
 	line-height: 1;
 	}
 
-.copy-icon svg, .hide-icon svg, .opt-header svg, .tool-toggle svg {
+.Xcopy-icon svg, .Xhide-icon svg, .Xopt-header svg, .Xtool-toggle svg {
 	width: 14px;
 	height: 14px;
 	vertical-align: middle;
@@ -325,43 +332,59 @@ nav {
 	height: 18px;
 	}
 
-.copy-icon {
+.chatbox img {
+	width: 14px;
+	height: 14px;
+	object-fit: contain;
+	vertical-align: middle;
+	margin-right: 4px;
+	}
+
+.info img {
+	width: 14px;
+	height: 14px;
+	object-fit: contain;
+	vertical-align: middle;
+	margin-right: 4px;
+	}
+
+.Xcopy-icon {
 	display: block;
 	text-align: right;
 	margin-top: 4px;
 	}
 
-.copy-icon:hover, .hide-icon:hover {
+.Xcopy-icon:hover, .Xhide-icon:hover {
 	opacity: 1;
 	}
 
-.approval-controls {
+.Xapproval-controls {
 	display: flex;
 	gap: 8px;
 	justify-content: flex-end;
 	}
 
-#archive-controls {
+#Xarchive-controls {
 	display: flex;
 	align-items: center;
 	gap: 10px;
 	}
 
-#archive-controls form {
+#Xarchive-controls form {
 	margin: 0;
 	}
 
-.approval-controls button {
+.Xapproval-controls button {
 	margin: 0;
 	padding: 6px 14px;
 	font-size: 0.85rem;
 	}
 
-.approval-controls button[data-action="deny"], .approval-controls button[data-action="stop"] {
+.Xapproval-controls button[data-action="deny"], .Xapproval-controls button[data-action="stop"] {
 	background: var(--error-bg);
 	}
 
-.tool-stopped {
+.Xtool-stopped {
 	padding: 5px 10px;
 	border-radius: 4px;
 	font-size: 0.75rem;
@@ -378,7 +401,65 @@ nav {
 	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
 	}
 
-.chatbox-bar {
+.chatbox-controls {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	}
+
+.action {
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	cursor: pointer;
+	user-select: none;
+	color: var(--tool-off-text);
+	}
+
+.action svg {
+	width: 16px;
+	height: 16px;
+	}
+
+.action[data-enabled] {
+	color: var(--tool-on-text);
+	}
+
+.chatbox-top {
+	display: flex;
+	gap: 12px;
+	}
+
+.chatbox-top > div {
+	cursor: pointer;
+	user-select: none;
+	}
+
+.chatbox-input {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: start;
+	}
+
+#system-model-list, #model-list, #tools-list {
+	width: 100%;
+	box-sizing: border-box;
+	}
+
+#system-model-list > div, #model-list > div, #tools-list > div {
+	cursor: pointer;
+	padding: 2px 0;
+	}
+
+#model-list [data-selected], #tools-list [data-enabled] {
+	color: var(--tool-on-text);
+	}
+
+.Xchatbox-bar {
 	position: fixed;
 	left: 0;
 	right: 0;
@@ -388,7 +469,7 @@ nav {
 	z-index: 10;
 	}
 
-.chatbox-bar::before {
+.Xchatbox-bar::before {
 	content: "";
 	position: absolute;
 	left: 0;
@@ -399,28 +480,28 @@ nav {
 	pointer-events: none;
 	}
 
-.chatbox.chatbox-fixed {
+.chatbox.Xchatbox-fixed {
 	width: min(760px, calc(100% - 40px));
 	box-sizing: border-box;
 	margin: 0 auto;
 	}
 
-.system-model.chatbox-fixed {
+.Xsystem-model.Xchatbox-fixed {
 	display: none;
 	width: min(760px, calc(100% - 40px));
 	box-sizing: border-box;
 	margin: 0 auto 6px;
 	}
 
-.system-model .opt-header {
+.Xsystem-model .Xopt-header {
 	text-align: right;
 	}
 
-.system-model .opt-header.hidden {
+.Xsystem-model .Xopt-header.hidden {
 	display: none;
 	}
 
-.messages {
+.Xmessages {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -432,7 +513,7 @@ nav {
 	gap: 6px;
 	}
 
-.chatbox .input-row {
+.chatbox .Xinput-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
 	gap: 12px;
@@ -469,44 +550,44 @@ button {
 	justify-content: center;
 	}
 
-.chatbox .opt-row {
+.chatbox .Xopt-row {
 	display: flex;
 	gap: 16px;
 	align-items: center;
 	}
 
-.chatbox .opt-models {
+.chatbox .Xopt-models {
 	font-size: 0.8rem;
 	color: #999999;
 	}
 
-.chatbox .opt-top-row {
+.chatbox .Xopt-top-row {
 	display: flex;
 	gap: 12px;
 	}
 
-.chatbox .opt-models {
+.chatbox .Xopt-models {
 	flex: 1 1 auto;
 	min-width: 0;
 	}
 
-.chatbox .opt-models #model-header {
+.chatbox .Xopt-models #model-header {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	}
 
-.model-list, .tools-list {
+.Xmodel-list, .Xtools-list {
 	width: 100%;
 	box-sizing: border-box;
 	}
 
-.tools-list {
+.Xtools-list {
 	text-align: right;
 	}
 
 
-.opt-header {
+.Xopt-header {
 	font-size: 0.85rem;
 	padding: 2px 0;
 	color: var(--tool-off-text);
@@ -514,11 +595,11 @@ button {
 	user-select: none;
 	}
 
-.model-list.collapsed, .tools-list.collapsed {
+.Xmodel-list.collapsed, .Xtools-list.collapsed {
 	display: none;
 	}
 
-.model-provider {
+.Xmodel-provider {
 	font-size: 0.75rem;
 	padding: 2px 0;
 	margin-top: 4px;
@@ -527,7 +608,7 @@ button {
 	}
 
 
-.model-toggle {
+.Xmodel-toggle {
 	font-size: 0.85rem;
 	padding: 2px 0;
 	color: var(--tool-off-text);
@@ -535,8 +616,8 @@ button {
 	user-select: none;
 	}
 
-.model-icon,
-.model-icon-small {
+.Xmodel-icon,
+.Xmodel-icon-small {
 	width: 14px;
 	height: 14px;
 	object-fit: contain;
@@ -544,11 +625,11 @@ button {
 	margin-right: 4px;
 	}
 
-.model-toggle.enabled {
+.Xmodel-toggle.Xenabled {
 	color: var(--tool-on-text);
 	}
 
-.tool-toggle {
+.Xtool-toggle {
 	font-size: 0.85rem;
 	padding: 2px 0;
 	color: var(--tool-off-text);
@@ -556,25 +637,25 @@ button {
 	user-select: none;
 	}
 
-.tool-toggle.enabled {
+.Xtool-toggle.Xenabled {
 	color: var(--tool-on-text);
 	}
 
-.emoji-toggle {
+.Xemoji-toggle {
 	opacity: 0.35;
 	}
 
-.emoji-toggle svg {
+.Xemoji-toggle svg {
 	width: 16px;
 	height: 16px;
 	vertical-align: middle;
 	}
 
-.emoji-toggle.enabled {
+.Xemoji-toggle.Xenabled {
 	opacity: 1;
 	}
 
-.mode-toggle:not(.enabled) {
+.Xmode-toggle:not(.Xenabled) {
 	color: red;
 	}
 
@@ -630,12 +711,12 @@ table {
 	margin: 10px 0;
 }
 
-.table-scroll {
+.Xtable-scroll {
 	overflow-x: auto;
 	max-width: 100%;
 }
 
-.table-scroll table {
+.Xtable-scroll table {
 	width: auto;
 	min-width: 100%;
 }
@@ -651,29 +732,29 @@ th {
 	color: var(--table-th-text);
 }
 
-td.cap {
+td.Xcap {
 	text-align: center;
 }
 
-#sessions-table h3 {
+#Xsessions-table h3 {
 	margin: 16px 0 6px;
 	color: var(--text);
 	}
 
-#sessions-table h3:first-child {
+#Xsessions-table h3:first-child {
 	margin-top: 0;
 	}
 
-.session-row {
+.Xsession-row {
 	padding: 4px 0;
 	}
 
-.session-time {
+.Xsession-time {
 	color: #999999;
 	margin-right: 10px;
 	}
 
-.session-raw-link {
+.Xsession-raw-link {
 	display: inline-block;
 	box-sizing: border-box;
 	padding: 8px 16px;
@@ -685,7 +766,7 @@ td.cap {
 	text-decoration: none;
 	}
 
-.model-description {
+.Xmodel-description {
 	font-size: 0.85rem;
 	font-style: italic;
 	color: var(--description-text);
@@ -695,7 +776,7 @@ td h4 {
 	margin: 0 0 4px;
 	}
 
-.moxdel-icon {
+.Xmoxdel-icon {
 	width: 20px;
 	height: 20px;
 	xobject-fit: contain;

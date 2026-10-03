@@ -26,7 +26,6 @@ MARKDOWN_EXTENSIONS = ['tables', 'fenced_code', 'codehilite', 'nl2br']
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FOLDER = os.path.join(APP_DIR, "sessions")
-ARCHIVE_FOLDER = os.path.join(APP_DIR, "archive")
 SESSION_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
 MESSAGE_PATTERN = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12})\.json$')
 
@@ -105,7 +104,7 @@ class Chat:
 		return self.openrouter.free_models + self.deepseek.free_models + self.local.free_models
 
 	def list(self, archived=False):
-		root = ARCHIVE_FOLDER if archived else SESSIONS_FOLDER
+		root = SESSIONS_FOLDER
 		sessions = []
 		if not os.path.isdir(root):
 			return sessions
@@ -121,6 +120,8 @@ class Chat:
 				continue
 			seen.add(session_id)
 			session = Session(uuid=session_id)
+			if session.archived != archived:
+				continue
 			prompt = next((b["content"] for m in session.messages for b in m.blocks if b["type"] == "prompt"), "")
 			title = "(empty)"
 			if prompt:
@@ -139,9 +140,7 @@ class Chat:
 				groups.append((day, [session]))
 		return groups
 
-	def message(self, prompt, model, reasoning=True, session=None, tools=None, mode="auto"):
-		if session is None:
-			session = str(uuid7.create(datetime.now(timezone.utc)))
+	def message(self, prompt, model, reasoning=True, session=None, tools=None, mode="auto", pause_requested=None):
 		session_obj = Session(uuid=session)
 		model_obj = next((m for m in self.models if m.id == model), None)
 		if model_obj is None:
@@ -156,7 +155,22 @@ class Chat:
 				"timestamp": turn.timestamp, "session": session}
 		turn.save()
 
-		yield from msg.run(model_obj, reasoning, active_tools, tools, mode, self.toolbox, turn)
+		should_pause = (lambda: session in pause_requested) if pause_requested is not None else None
+		yield from msg.run(model_obj, reasoning, active_tools, tools, mode, self.toolbox, turn, should_pause=should_pause)
+
+	def continue_message(self, session_id, model, reasoning=True, tools=None, mode="auto", pause_requested=None):
+		session_obj = Session(uuid=session_id)
+		model_obj = next((m for m in self.models if m.id == model), None)
+		if model_obj is None:
+			raise ValueError(f"unknown model: {model}")
+		active_tools = [t.schema for t in self.toolbox.tools if tools is not None and t.name in tools]
+
+		messages = session_obj.messages
+		if not messages:
+			return
+		msg = messages[-1]
+		should_pause = (lambda: session_id in pause_requested) if pause_requested is not None else None
+		yield from msg.run(model_obj, reasoning, active_tools, tools, mode, self.toolbox, should_pause=should_pause)
 
 	def resume(self, session_id, action, model, reasoning=True, tools=None, mode="auto"):
 		session_obj = Session(uuid=session_id)
@@ -212,27 +226,37 @@ class Session:
 
 	@property
 	def archived(self):
-		return (os.path.isfile(os.path.join(ARCHIVE_FOLDER, f"{self.uuid}.tar.bz2"))
-				or os.path.isdir(os.path.join(ARCHIVE_FOLDER, self.uuid)))
-
-	@property
-	def root(self):
-		return ARCHIVE_FOLDER if self.archived else SESSIONS_FOLDER
+		return os.path.isfile(self.archive_path) and not os.path.isdir(self.folder)
 
 	@property
 	def folder(self):
-		return os.path.join(self.root, self.uuid)
+		return os.path.join(SESSIONS_FOLDER, self.uuid)
 
 	@property
 	def archive_path(self):
 		return self.folder + ".tar.bz2"
 
 	@property
-	def packed(self):
-		return os.path.isfile(self.archive_path) and not os.path.isdir(self.folder)
+	def status_path(self):
+		return os.path.join(self.folder, "session.json")
+
+	@property
+	def status(self):
+		if not os.path.isfile(self.status_path):
+			return "idle"
+		with open(self.status_path) as f:
+			return json.load(f)["status"]
+
+	@status.setter
+	def status(self, value):
+		os.makedirs(self.folder, exist_ok=True)
+		tmp = self.status_path + ".tmp"
+		with open(tmp, "w") as f:
+			json.dump({"status": value}, f)
+		os.replace(tmp, self.status_path)
 
 	def unpack(self):
-		if not self.packed:
+		if not self.archived:
 			return
 		os.makedirs(self.folder, exist_ok=True)
 		with tarfile.open(self.archive_path, "r:bz2") as tar:
@@ -240,35 +264,27 @@ class Session:
 		os.remove(self.archive_path)
 
 	def pack(self):
-		if self.packed or not os.path.isdir(self.folder):
+		if self.archived or not os.path.isdir(self.folder):
 			return
-		os.makedirs(self.root, exist_ok=True)
 		tmp = self.archive_path + ".tmp"
 		with tarfile.open(tmp, "w:bz2") as tar:
 			for name in sorted(os.listdir(self.folder)):
-				if MESSAGE_PATTERN.match(name):
-					tar.add(os.path.join(self.folder, name), arcname=name)
+				tar.add(os.path.join(self.folder, name), arcname=name)
 		os.replace(tmp, self.archive_path)
 		shutil.rmtree(self.folder)
 
 	def archive(self):
+		if self.status == "busy":
+			raise ValueError("cannot archive a busy session")
 		self.pack()
-		os.makedirs(ARCHIVE_FOLDER, exist_ok=True)
-		src = os.path.join(SESSIONS_FOLDER, f"{self.uuid}.tar.bz2")
-		if os.path.isfile(src):
-			os.replace(src, os.path.join(ARCHIVE_FOLDER, f"{self.uuid}.tar.bz2"))
 
 	def unarchive(self):
-		self.pack()
-		src = os.path.join(ARCHIVE_FOLDER, f"{self.uuid}.tar.bz2")
-		if os.path.isfile(src):
-			os.makedirs(SESSIONS_FOLDER, exist_ok=True)
-			os.replace(src, os.path.join(SESSIONS_FOLDER, f"{self.uuid}.tar.bz2"))
+		self.unpack()
 
 	@property
 	def messages(self):
-		if self.packed:
-			self.unpack()
+		if self.archived:
+			return self.archived_messages()
 		if not os.path.isdir(self.folder):
 			return []
 		filenames = sorted(f for f in os.listdir(self.folder) if MESSAGE_PATTERN.match(f))
@@ -277,6 +293,13 @@ class Session:
 			with open(os.path.join(self.folder, filename)) as f:
 				data = json.load(f)
 			messages.append(Message.from_dict(self, data))
+		return messages
+
+	def archived_messages(self):
+		with tarfile.open(self.archive_path, "r:bz2") as tar:
+			members = sorted((m for m in tar.getmembers() if MESSAGE_PATTERN.match(m.name)),
+					key=lambda m: m.name)
+			messages = [Message.from_dict(self, json.load(tar.extractfile(m))) for m in members]
 		return messages
 
 	@property
@@ -364,8 +387,8 @@ class Message:
 		return message
 
 	def save(self):
-		if self.session.packed:
-			self.session.unpack()
+		if self.session.archived:
+			raise ValueError("cannot save a message on an archived session")
 		os.makedirs(self.session.folder, exist_ok=True)
 		tmp = self.path + ".tmp"
 		with open(tmp, "w") as f:
@@ -438,7 +461,7 @@ class Message:
 						"uuid": turn.uuid, "timestamp": turn.timestamp, "session": self.session.uuid})
 		return blocks
 
-	def run(self, model, reasoning, active_tools, tool_names, mode, toolbox, turn=None):
+	def run(self, model, reasoning, active_tools, tool_names, mode, toolbox, turn=None, should_pause=None):
 		session_uuid = self.session.uuid
 		for step in range(MAX_STEPS):
 			if turn is None:
@@ -571,6 +594,9 @@ class Message:
 							"content": tool_turn.result, "error": tool_turn.error,
 							"uuid": tool_turn.uuid, "timestamp": tool_turn.timestamp, "session": session_uuid}
 				turn = None
+				if should_pause and should_pause():
+					yield {"type": "paused", "session": session_uuid}
+					return
 				continue
 
 			if not content_parts:

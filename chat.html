@@ -4,7 +4,7 @@
 
 {% block topbar %}
 {% if session_id %}
-    <div class="session-bar"><div class="session-bar-inner">{{ session_id }}</div></div>
+    <div class="session-bar"><span>{{ session_id }}</span></div>
 {% endif %}
 {% endblock %}
 
@@ -23,14 +23,14 @@
                         <span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
                         {{ msg.content }}
                     </div>
-                    <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
             {% elif msg.type == "reasoning" %}
                 <div class="reasoning" onclick="toggleMessage(this)">
                     <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
-                    <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
             {% elif msg.type == "tool_call" %}
                 {% if msg.content %}
@@ -38,7 +38,7 @@
                     <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
-                    <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
                 {% endif %}
                 {% for call in msg.tool_calls %}
@@ -56,7 +56,7 @@
                             <div class="tool-raw">{{ result.content }}</div>
                         {% endif %}
                     </div>
-                    <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
                 {% endif %}
                 {% endfor %}
@@ -106,7 +106,7 @@
                             {% endif %}
                         </div>
 
-                        <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                        <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                     </div>
                 {% else %}
                     {# Pure error: display as before #}
@@ -120,7 +120,7 @@
                                 <p>{{ msg.error.metadata.raw }}</p>
                             {% endif %}
                         </div>
-                        <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                        <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                     </div>
                 {% endif %}
             {% elif msg.type == "response" and msg.content %}
@@ -128,7 +128,7 @@
                     <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
-                    <span class="copy-icon" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
+                    <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
             {% elif msg.type == "tool_stopped" %}
                 <div class="tool-stopped">Stopped</div>
@@ -138,7 +138,7 @@
             <div class="turn-meta">
                 <div class="info">
                     {% set icon = model_icon_url(icons, last_resp.model) %}
-                    {% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}
+                    {% if icon %}<img src="{{ icon }}" alt="">{% endif %}
                     <small>{{ model_name(last_resp.model) }}</small>
                 </div>
                 {% if last_resp.usage %}
@@ -160,7 +160,7 @@
             </div>
             {% endif %}
             <div class="message-actions">
-                <span class="hide-icon" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history"><i data-lucide="eye-off"></i></span>
+                <span class="action" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history"><i data-lucide="eye-off"></i></span>
             </div>
         </div>
     {% endfor %}
@@ -189,79 +189,7 @@
     {% endif %}
     </div>
 
-    {% if not archived %}
-    {% set selected_id = default_model or MODELS[0].id %}
-    {% set selected_icon = model_icon_url(icons, selected_id) %}
-    <div class="chatbox-bar">
-    <div class="system-model chatbox-fixed">
-        <div class="opt-header" id="system-model-header" onclick="toggleSystemModelList()"><img class="model-icon-small" src="" alt="" hidden><span>none</span></div>
-        <div class="model-list collapsed" id="system-model-list">
-            <div class="opt-header" onclick="toggleSystemModelList()">Models</div>
-            <div class="model-toggle enabled" data-id="" data-name="none" onclick="selectSystemModel(this)">none</div>
-            {% for model in MODELS %}
-                {% set icon = model_icon_url(icons, model.id) %}
-                <div class="model-toggle" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectSystemModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="chatbox chatbox-fixed">
-    <form id="chat-form" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
-        <div class="input-row">
-        <div class="input">
-            <textarea name="prompt" id="prompt" rows="2" placeholder="Message" required style="background: transparent;"></textarea>
-        </div>
-
-        <div class="opt-header" title="Send" onclick="document.getElementById('chat-form').requestSubmit()"><i data-lucide="send"></i></div>
-        </div>
-
-        <div class="model-list collapsed" id="model-list">
-            <div class="model-provider">OpenRouter</div>
-            {% for model in MODELS if model.id.split('/')[0] == 'openrouter' %}
-                {% set icon = model_icon_url(icons, model.id) %}
-                <div class="model-toggle {% if model.id == selected_id %}enabled{% endif %}" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
-            {% endfor %}
-
-            <div class="model-provider">DeepSeek</div>
-            {% for model in MODELS if model.id.split('/')[0] == 'deepseek' %}
-                {% set icon = model_icon_url(icons, model.id) %}
-                <div class="model-toggle {% if model.id == selected_id %}enabled{% endif %}" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
-            {% endfor %}
-
-            <div class="model-provider">Local</div>
-            {% for model in MODELS if model.id.split('/')[0] == 'local' %}
-                {% set icon = model_icon_url(icons, model.id) %}
-                <div class="model-toggle {% if model.id == selected_id %}enabled{% endif %}" data-id="{{ model.id }}" data-name="{{ model.name }}" onclick="selectModel(this)">{% if icon %}<img class="model-icon-small" src="{{ icon }}" alt="">{% endif %}{{ model.name }}</div>
-            {% endfor %}
-        </div>
-
-        <div class="tools-list collapsed">
-            {% for tool in TOOLS %}
-                <div class="tool-toggle" data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>
-                <input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
-            {% endfor %}
-        </div>
-
-        <div class="opt-row">
-        <div class="opt-models">
-            <div class="opt-header" id="model-header" onclick="toggleModelList()"><img class="model-icon-small" src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
-            <input type="hidden" name="model" id="model-input" value="{{ selected_id }}">
-        </div>
-
-        <div class="tool-toggle emoji-toggle enabled" id="reasoning-toggle" data-name="reasoning" onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
-        <input type="hidden" name="reasoning" value="1">
-
-        <div class="mode-toggle emoji-toggle" id="mode-toggle" data-mode="auto" onclick="toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="shield-check"></i></div>
-        <input type="hidden" name="mode" id="mode-input" value="auto">
-
-        <div class="opt-header" onclick="toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
-
-        <div class="opt-header" onclick="refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
-        </div>
-    </form>
-    </div>
-    </div>
-    {% endif %}
+    {% include "chatbox.html" %}
 
 {% if not session_id %}
 
