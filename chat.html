@@ -11,23 +11,23 @@
 {% block content %}
 
 {% if session_id %}
-    <div>
+    <div class="messages">
     {% for turn in turns %}
-        <div class="message" data-uuid="{{ turn[0].uuid }}">
+        <div class="message{{ ' message-hidden' if turn[0].hidden else '' }}" data-uuid="{{ turn[0].uuid }}">
             {% set resp_msgs = turn | selectattr('type', 'equalto', 'response') | selectattr('content') | list %}
             {% set last_resp = resp_msgs[-1] if resp_msgs else None %}
             {% for msg in turn %}
             {% if msg.type == "prompt" %}
                 <div class="prompt" onclick="toggleMessage(this)">
-                    <div>
-                        <span>{{ turn[0].timestamp|format_time }}</span>
+                    <div class="content">
+                        <span class="turn-time">{{ turn[0].timestamp|format_time }}</span>
                         {{ msg.content }}
                     </div>
                     <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
             {% elif msg.type == "reasoning" %}
                 <div class="reasoning" onclick="toggleMessage(this)">
-                    <div>
+                    <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
                     <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
@@ -35,7 +35,7 @@
             {% elif msg.type == "tool_call" %}
                 {% if msg.content %}
                 <div class="response" onclick="toggleMessage(this)">
-                    <div>
+                    <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
                     <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
@@ -45,15 +45,15 @@
                 {% set result = find_tool_result(turn, call.id) %}
                 {% set label = tool_summary(call.function.name, call.function.arguments) %}
                 {% if call.function.name in NO_CONTENT_TOOLS %}
-                <div class="tool{{ ' error' if result and result.error else '' }}">
+                <div class="tool tool-static{{ ' error' if result and result.error else '' }}">
                     <div><span>{{ label }}</span>{% if result and result.error %} <span>{{ result.error.message }}</span>{% endif %}</div>
                 </div>
                 {% else %}
                 <div class="tool{{ ' error' if result and result.error else '' }}" onclick="toggleMessage(this)">
-                    <div>
-                        <div>{{ label }}</div>
+                    <div class="content">
+                        <div class="tool-summary">{{ label }}</div>
                         {% if result and result.content %}
-                            <div>{{ result.content }}</div>
+                            <div class="tool-raw">{{ result.content }}</div>
                         {% endif %}
                     </div>
                     <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
@@ -68,16 +68,16 @@
 
                 {% if has_reasoning or has_response or has_tools %}
                     {# Partial error: display content normally but with error styling #}
-                    <div onclick="toggleMessage(this)">
+                    <div class="message-error-partial" onclick="toggleMessage(this)">
                         {% if has_reasoning %}
                             <div class="reasoning">
-                                <div>{{ msg.reasoning|markdown|safe }}</div>
+                                <div class="content">{{ msg.reasoning|markdown|safe }}</div>
                             </div>
                         {% endif %}
 
                         {% if has_response %}
                             <div class="response">
-                                <div>{{ msg.response|markdown|safe }}</div>
+                                <div class="content">{{ msg.response|markdown|safe }}</div>
                             </div>
                         {% endif %}
 
@@ -85,10 +85,10 @@
                             {% for tool in msg.tools %}
                                 {# Display tool content #}
                                 <div class="tool">
-                                    <div>
-                                        <div>{{ tool.label }}</div>
+                                    <div class="content">
+                                        <div class="tool-summary">{{ tool.label }}</div>
                                         {% if tool.content %}
-                                            <div>{{ tool.content }}</div>
+                                            <div class="tool-raw">{{ tool.content }}</div>
                                         {% endif %}
                                     </div>
                                 </div>
@@ -96,7 +96,7 @@
                         {% endif %}
 
                         {# Error message at the end #}
-                        <div class="error">
+                        <div class="error-message">
                             <p>{{ msg.error.message }}</p>
                             {% if msg.error.code %}
                                 <small>Code: {{ msg.error.code }}</small>
@@ -111,7 +111,7 @@
                 {% else %}
                     {# Pure error: display as before #}
                     <div class="error" onclick="toggleMessage(this)">
-                        <div>
+                        <div class="content">
                             <p>{{ msg.error.message }}</p>
                             {% if msg.error.code %}
                                 <small>Code: {{ msg.error.code }}</small>
@@ -125,24 +125,24 @@
                 {% endif %}
             {% elif msg.type == "response" and msg.content %}
                 <div class="response" onclick="toggleMessage(this)">
-                    <div>
+                    <div class="content">
                         {{ msg.content|markdown|safe }}
                     </div>
                     <span class="action" onclick="event.stopPropagation(); copyBlock(this)" title="Copy"><i data-lucide="copy"></i></span>
                 </div>
             {% elif msg.type == "tool_stopped" %}
-                <div>Stopped</div>
+                <div class="tool-stopped">Stopped</div>
             {% endif %}
             {% endfor %}
             {% if last_resp %}
-            <div>
+            <div class="turn-meta">
                 <div class="info">
                     {% set icon = model_icon_url(icons, last_resp.model) %}
                     {% if icon %}<img src="{{ icon }}" alt="">{% endif %}
                     <small>{{ model_name(last_resp.model) }}</small>
                 </div>
                 {% if last_resp.usage %}
-                <div>
+                <div class="usage-info">
                     <small>
                         {% if last_resp.usage.prompt_tokens %}Input: {{ last_resp.usage.prompt_tokens }}{% endif %}
                         {% if last_resp.usage.completion_tokens %}{% if last_resp.usage.prompt_tokens %} | {% endif %}Output: {{ last_resp.usage.completion_tokens }}{% endif %}
@@ -159,13 +159,13 @@
                 {% endif %}
             </div>
             {% endif %}
-            <div>
+            <div class="message-actions">
                 <span class="action" onclick="hideMessageTurn(this, '{{ session_id }}', '{{ turn[0].uuid }}')" title="Hide from history"><i data-lucide="eye-off"></i></span>
             </div>
         </div>
     {% endfor %}
     {% if pending_tool_calls %}
-        <div>
+        <div class="approval-controls" id="approval-controls">
             <button type="button" data-action="approve" onclick="resumeToolCalls('approve', this)">Approve</button>
             <button type="button" data-action="deny" onclick="resumeToolCalls('deny', this)">Deny</button>
             <button type="button" data-action="stop" onclick="resumeToolCalls('stop', this)">Stop</button>
@@ -174,7 +174,7 @@
     </div>
 {% endif %}
 
-    <div>
+    <div id="archive-controls">
     {% if session_id %}
         {% if archived %}
         <form action="/api/{{ session_id }}/unarchive" method="post">
@@ -185,7 +185,7 @@
             <button type="submit">Archive</button>
         </form>
         {% endif %}
-        <a href="/api/{{ session_id }}/raw">raw</a>
+        <a href="/api/{{ session_id }}/raw" class="session-raw-link">raw</a>
     {% endif %}
     </div>
 

@@ -4,8 +4,9 @@
 <div class="chatbox">
 
 <div class="chatbox-top">
-    <div id="system-model-link" onclick="toggleSystemModelList()"><img src="" alt="" hidden><span>none</span></div>
-    <div>
+    <div id="system-model-header" onclick="toggleSystemModelList()"><img src="" alt="" hidden><span>none</span></div>
+    <div class="menu hidden" id="system-model-list">
+        <div class="action" onclick="toggleSystemModelList()"><i data-lucide="x"></i></div>
         <div onclick="toggleSystemModelList()">Models</div>
         <div data-id="" data-name="none" onclick="selectSystemModel(this)">none</div>
         {% for model in MODELS %}
@@ -15,15 +16,16 @@
     </div>
 </div>
 
-<form action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
+<form id="chat-form" action="{% if session_id %}/api/{{ session_id }}/message{% else %}/api/message{% endif %}" method="post">
     <div class="chatbox-input">
         <textarea name="prompt" rows="2" placeholder="Message" required style="background: transparent;"></textarea>
-        <div>
+        <div id="send-controls">
             <div class="action" title="Send" onclick="document.getElementById('chat-form').requestSubmit()"><i data-lucide="send"></i></div>
         </div>
     </div>
 
-    <div>
+    <div class="menu hidden" id="model-list">
+        <div class="action" onclick="toggleModelList()"><i data-lucide="x"></i></div>
         <div>OpenRouter</div>
         {% for model in MODELS if model.id.split('/')[0] == 'openrouter' %}
             {% set icon = model_icon_url(icons, model.id) %}
@@ -43,7 +45,8 @@
         {% endfor %}
     </div>
 
-    <div>
+    <div class="menu hidden" id="tools-list">
+        <div class="action" onclick="toggleToolsList()"><i data-lucide="x"></i></div>
         {% for tool in TOOLS %}
             <div data-name="{{ tool.function.name }}" onclick="toggleTool(this)">{{ tool.function.name }}</div>
             <input type="hidden" name="tools" value="{{ tool.function.name }}" disabled>
@@ -51,18 +54,18 @@
     </div>
 
     <div class="chatbox-controls">
-        <div id="model-link" onclick="toggleModelList()"><img src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
-        <input type="hidden" name="model" value="{{ selected_id }}">
+        <div id="model-header" onclick="toggleModelList()"><img src="{{ selected_icon or '' }}" alt=""{% if not selected_icon %} hidden{% endif %}><span>{{ model_name(selected_id) }}</span></div>
+        <input type="hidden" name="model" id="model-input" value="{{ selected_id }}">
 
         <div class="action" id="reasoning-toggle" data-name="reasoning" data-enabled onclick="toggleReasoning(this)" title="Think"><i data-lucide="brain"></i></div>
         <input type="hidden" name="reasoning" value="1">
 
         <div class="action" id="mode-toggle" data-mode="auto" onclick="toggleMode(this)" title="Auto: tools run without approval"><i data-lucide="shield-check"></i></div>
-        <input type="hidden" name="mode" value="auto">
+        <input type="hidden" name="mode" id="mode-input" value="auto">
 
-        <div class="action" id="tools-button" onclick="toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
+        <div class="action" onclick="toggleToolsList()" title="Tools"><i data-lucide="wrench"></i></div>
 
-        <div class="action" id="refresh-button" onclick="refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
+        <div class="action" onclick="refreshModels()" title="Refresh model list"><i data-lucide="refresh-cw"></i></div>
     </div>
 </form>
 </div>

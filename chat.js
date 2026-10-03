@@ -114,17 +114,17 @@ const MODEL_STORAGE_KEY = 'chatpad-selected-model';
 
 function toggleModelList() {
 	const list = document.getElementById('model-list');
-	const collapsed = list.classList.toggle('collapsed');
-	if (!collapsed) {
-		document.querySelector('.tools-list').classList.add('collapsed');
+	const hidden = list.classList.toggle('hidden');
+	if (!hidden) {
+		document.getElementById('tools-list').classList.add('hidden');
 	}
 }
 
 function toggleToolsList() {
-	const list = document.querySelector('.tools-list');
-	const collapsed = list.classList.toggle('collapsed');
-	if (!collapsed) {
-		document.getElementById('model-list').classList.add('collapsed');
+	const list = document.getElementById('tools-list');
+	const hidden = list.classList.toggle('hidden');
+	if (!hidden) {
+		document.getElementById('model-list').classList.add('hidden');
 	}
 }
 
@@ -158,7 +158,7 @@ function selectModel(el) {
 	el.classList.add('enabled');
 	document.getElementById('model-input').value = el.dataset.id;
 	setHeaderModel(document.getElementById('model-header'), el);
-	document.getElementById('model-list').classList.add('collapsed');
+	document.getElementById('model-list').classList.add('hidden');
 	saveSelectedModel();
 }
 
@@ -176,8 +176,8 @@ function saveSelectedModel() {
 const SYSTEM_MODEL_STORAGE_KEY = 'chatpad-system-model';
 
 function toggleSystemModelList() {
-	const collapsed = document.getElementById('system-model-list').classList.toggle('collapsed');
-	document.getElementById('system-model-header').classList.toggle('hidden', !collapsed);
+	const hidden = document.getElementById('system-model-list').classList.toggle('hidden');
+	document.getElementById('system-model-header').classList.toggle('hidden', !hidden);
 }
 
 function selectSystemModel(el) {
@@ -185,7 +185,7 @@ function selectSystemModel(el) {
 	el.classList.add('enabled');
 	setHeaderModel(document.getElementById('system-model-header'), el);
 	document.getElementById('system-model-header').classList.remove('hidden');
-	document.getElementById('system-model-list').classList.add('collapsed');
+	document.getElementById('system-model-list').classList.add('hidden');
 	localStorage.setItem(SYSTEM_MODEL_STORAGE_KEY, el.dataset.id);
 }
 
@@ -640,7 +640,7 @@ async function submitLiveChat(event) {
 	event.preventDefault();
 	const form = event.currentTarget;
 	const formData = new FormData(form);
-	const promptEl = document.getElementById('prompt');
+	const promptEl = form.querySelector('textarea[name="prompt"]');
 	promptEl.value = '';
 	const button = form.querySelector('button[type="submit"]');
 	if (button) button.disabled = true;
