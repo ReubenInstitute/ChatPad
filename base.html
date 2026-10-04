@@ -12,8 +12,8 @@
 <body>
 
 <nav>
-	<a href="/" class="{{ 'active' if (request.path == '/' or request.path == '/chat' or request.path.startswith('/chat/')) and not (archived is defined and archived) else '' }}">Main</a>
-	<a href="/sessions" class="{{ 'active' if request.path.startswith('/sessions') or request.path.startswith('/archive') or (archived is defined and archived) else '' }}">Sessions</a>
+	<a href="/" class="{{ 'active' if request.path == '/' or request.path == '/chat' else '' }}">Main</a>
+	<a href="/sessions" class="{{ 'active' if request.path.startswith('/sessions') or request.path.startswith('/archive') or request.path.startswith('/chat/') else '' }}">Sessions</a>
 	<a href="/models" class="{{ 'active' if request.path == '/models' else '' }}">Models</a>
 </nav>
 {% block topbar %}{% endblock %}
