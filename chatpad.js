@@ -73,6 +73,18 @@ class Session {
 		this.messages = json.messages.map(m => new Message(m, this))
 	}
 
+	get models() {
+		const models = []
+		for (const message of this.messages) {
+			for (const turn of message.turns) {
+				if (turn instanceof MessageTurn && turn.model && !models.includes(turn.model)) {
+					models.push(turn.model)
+				}
+			}
+		}
+		return models
+	}
+
 	// action is omitted for a plain continue-after-pause, or 'approve'/'deny'/'stop'
 	// to resolve a pending tool-call approval. formData carries the chatbox's
 	// current model/tools/mode/reasoning, read fresh at the moment of the click.
@@ -157,12 +169,12 @@ class MessageView {
 		this.turn_views = []
 	}
 
-	directChild(className) {
-		return Array.from(this.container.children).find(c => c.classList.contains(className))
+	directChild(selector) {
+		return Array.from(this.container.children).find(c => c.matches(selector))
 	}
 
 	insertDirectChild(el) {
-		const action = this.directChild('action')
+		const action = this.directChild('.action')
 		if (action) this.container.insertBefore(el, action)
 		else this.container.appendChild(el)
 	}
@@ -196,11 +208,17 @@ class MessageView {
 		const turn = this.message.turns[this.message.turns.length - 1]
 		if (!(turn instanceof MessageTurn) || !turn.model) return
 
-		let model = this.directChild('info-model')
+		let info = this.directChild('.info')
+		if (!info) {
+			info = document.createElement('div')
+			info.className = 'info'
+			this.insertDirectChild(info)
+		}
+
+		let model = info.children[0]
 		if (!model) {
 			model = document.createElement('div')
-			model.className = 'info info-model'
-			this.insertDirectChild(model)
+			info.appendChild(model)
 		}
 		model.innerHTML = ''
 		const [provider, , rest] = turn.model.includes('/') ? turn.model.split(/\/(.*)/) : [null, null, null]
@@ -219,30 +237,45 @@ class MessageView {
 
 		const inputTokens = this.message.input_tokens
 		const outputTokens = this.message.output_tokens
-		const contextLength = modelInfo && modelInfo.context_length
+		const contextLength = this.message.context_length || (modelInfo && modelInfo.context_length)
 		if (!inputTokens && !outputTokens && !contextLength) return
-		let usage = this.directChild('info-usage')
+		let usage = info.children[1]
 		if (!usage) {
 			usage = document.createElement('div')
-			usage.className = 'info info-usage'
-			this.insertDirectChild(usage)
+			info.appendChild(usage)
 		}
 		const parts = []
 		if (inputTokens) parts.push('Input: ' + inputTokens)
 		if (outputTokens) parts.push('Output: ' + outputTokens)
 		if (contextLength) {
 			let max = 'Max: ' + formatNumber(contextLength)
-			if (inputTokens) max += ' (' + (inputTokens / contextLength * 100).toFixed(1) + '%)'
+			if (inputTokens || outputTokens) max += ' (' + (((inputTokens || 0) + (outputTokens || 0)) / contextLength * 100).toFixed(1) + '%)'
 			parts.push(max)
 		}
 		usage.innerHTML = ''
 		const small2 = document.createElement('small')
 		small2.textContent = parts.join(' | ')
 		usage.appendChild(small2)
+
+		let bar = info.querySelector('[data-usage]')
+		if (contextLength && (inputTokens || outputTokens)) {
+			if (!bar) {
+				bar = document.createElement('div')
+				bar.dataset.usage = ''
+				bar.appendChild(document.createElement('div'))
+				bar.appendChild(document.createElement('div'))
+				info.appendChild(bar)
+			}
+			const [inputBar, outputBar] = bar.children
+			inputBar.style.width = Math.min(100, inputTokens / contextLength * 100) + '%'
+			outputBar.style.width = Math.min(100, outputTokens / contextLength * 100) + '%'
+		} else if (bar) {
+			bar.remove()
+		}
 	}
 
 	drawHideAction() {
-		let action = this.directChild('action')
+		let action = this.directChild('.action')
 		if (!action) {
 			action = document.createElement('span')
 			action.className = 'action'
@@ -265,13 +298,13 @@ class MessageView {
 	// exactly like a Chatbox setting - the write is the save.
 	hide() {
 		this.container.classList.add('hidden')
-		this.updateHideAction(this.directChild('action'))
+		this.updateHideAction(this.directChild('.action'))
 		fetch(`/api/sessions/${this.message.session.uuid}/messages/${this.message.uuid}/hide`, { method: 'POST' })
 	}
 
 	unhide() {
 		this.container.classList.remove('hidden')
-		this.updateHideAction(this.directChild('action'))
+		this.updateHideAction(this.directChild('.action'))
 		fetch(`/api/sessions/${this.message.session.uuid}/messages/${this.message.uuid}/unhide`, { method: 'POST' })
 	}
 }
@@ -812,6 +845,7 @@ async function handleStreamRecord(record) {
 				currentMessage().input_tokens = record.usage.prompt_tokens
 				currentMessage().output_tokens = record.usage.completion_tokens
 			}
+			if (record.context_length) currentMessage().context_length = record.context_length
 		}
 	} else if (record.type === 'error') {
 		currentTurn().error = record.error

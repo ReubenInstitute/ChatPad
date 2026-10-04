@@ -3,19 +3,18 @@
 {% block title %}Models{% endblock %}
 
 {% macro models_table(models, icons) %}
-	<div class="table-scroll">
 	<table>
 		<thead>
 			<tr>
 				<th>Model</th>
-				<th>Context Length</th>
-				<th>Tools</th>
-				<th>Vision</th>
-				<th>Audio</th>
-				<th>File</th>
-				<th>Reasoning</th>
-				<th>JSON</th>
-				<th>Web search</th>
+				<th>Context</th>
+				{# <th>Tools</th> #}
+				{# <th>Vision</th> #}
+				{# <th>Audio</th> #}
+				{# <th>File</th> #}
+				{# <th>Reasoning</th> #}
+				{# <th>JSON</th> #}
+				{# <th>Web search</th> #}
 				{# <th>Pricing</th> #}
 				{# <th>Overrides</th> #}
 				{# <th>Overridden Pricing</th> #}
@@ -34,13 +33,13 @@
 				<!-- Capabilities -->
 				{% set params = model.supported_parameters or [] %}
 				{% set inputs = model.input_modalities or [] %}
-				<td class="cap">{{ '✓' if 'tools' in params }}</td>
-				<td class="cap">{{ '✓' if 'image' in inputs }}</td>
-				<td class="cap">{{ '✓' if 'audio' in inputs }}</td>
-				<td class="cap">{{ '✓' if 'file' in inputs }}</td>
-				<td class="cap">{{ '✓' if 'reasoning' in params }}</td>
-				<td class="cap">{{ '✓' if 'structured_outputs' in params }}</td>
-				<td class="cap">{{ '✓' if 'web_search_options' in params }}</td>
+				{# <td class="cap">{{ '✓' if 'tools' in params }}</td> #}
+				{# <td class="cap">{{ '✓' if 'image' in inputs }}</td> #}
+				{# <td class="cap">{{ '✓' if 'audio' in inputs }}</td> #}
+				{# <td class="cap">{{ '✓' if 'file' in inputs }}</td> #}
+				{# <td class="cap">{{ '✓' if 'reasoning' in params }}</td> #}
+				{# <td class="cap">{{ '✓' if 'structured_outputs' in params }}</td> #}
+				{# <td class="cap">{{ '✓' if 'web_search_options' in params }}</td> #}
 
 				{# <!-- Base pricing -->
 				<td>
@@ -72,7 +71,6 @@
 		{% endfor %}
 		</tbody>
 	</table>
-	</div>
 {% endmacro %}
 
 {% block content %}

@@ -127,7 +127,7 @@ class ChatPad:
 			title = "(empty)"
 			if prompt:
 				title = prompt[:30] + ("..." if len(prompt) > 30 else "")
-			sessions.append((session_id, session.timestamp, title))
+			sessions.append((session_id, session.timestamp, title, session.models))
 		sessions.sort(key=lambda x: x[1], reverse=True)
 		return sessions
 
@@ -342,6 +342,15 @@ class Session:
 	@property
 	def blocks(self):
 		return [b for m in self.messages for b in m.blocks]
+
+	@property
+	def models(self):
+		models = []
+		for message in self.messages:
+			for turn in message.turns:
+				if isinstance(turn, MessageTurn) and turn.model and turn.model not in models:
+					models.append(turn.model)
+		return models
 
 	def history(self, think=False):
 		history = []

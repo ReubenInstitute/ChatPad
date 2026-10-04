@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, Response
 from ChatPad import ChatPad, Session, Turn, ToolTurn, NO_CONTENT_TOOLS, tool_summary
 import re
+import requests
 from rotate_keys import rotate
+import subprocess
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 chatpad = ChatPad()
@@ -176,9 +178,11 @@ def raw_view(session_id):
     return export_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
+ICON_DIR = os.path.join(ROOT, "@@", "models")
+
 def model_icons():
 	icons = {}
-	for f in os.listdir(os.path.join(ROOT, "@@", "models")):
+	for f in os.listdir(ICON_DIR):
 		icons[os.path.splitext(f)[0]] = f"/@@/models/{f}"
 	return icons
 
@@ -208,6 +212,31 @@ def model_context_lengths():
 
 @app.route('/models')
 def models_view():
+	chatpad.openrouter.load_models()
+	chatpad.deepseek.load_models()
+	chatpad.local.load_models()
+	for slug in {s for s in (model_icon_slug(m.id) for m in chatpad.models) if s}:
+		if any(f.startswith(f"{slug}.") for f in os.listdir(ICON_DIR)):
+			continue
+		try:
+			page = requests.get(f"https://openrouter.ai/{slug}", headers={"User-Agent": "Mozilla/5.0"}, timeout=30).text
+			src = re.search(r'Favicon for %s"[^>]*src="([^"]+)"' % re.escape(slug), page).group(1).replace("&amp;", "&")
+			if src.startswith("/"):
+				src = "https://openrouter.ai" + src
+			ext = src.split("?")[0].rsplit(".", 1)[-1].lower()
+			if ext not in ("svg", "png", "webp", "jpg", "jpeg", "ico"):
+				ext = "png"
+			img = requests.get(src, headers={"User-Agent": "Mozilla/5.0"}, timeout=30).content
+			if ext == "svg":
+				# These providers' marks render invisibly transparent/black on our
+				# dark theme (no fill, or a near-black fill); force a visible chip.
+				bg = ["-b", "silver"] if slug in ("openai", "apodex", "ibm-granite") else []
+				img = subprocess.run(["rsvg-convert", "-w", "64", "-h", "64"] + bg, input=img, capture_output=True, check=True).stdout
+				ext = "png"
+			with open(os.path.join(ICON_DIR, f"{slug}.{ext}"), "wb") as f:
+				f.write(img)
+		except Exception:
+			pass
 	return render_template('models.html', models=chatpad.models, icons=model_icons())
 
 @app.route('/sessions')
@@ -260,6 +289,28 @@ def api_models():
 	chatpad.openrouter.load_models()
 	chatpad.deepseek.load_models()
 	chatpad.local.load_models()
+	for slug in {s for s in (model_icon_slug(m.id) for m in chatpad.models) if s}:
+		if any(f.startswith(f"{slug}.") for f in os.listdir(ICON_DIR)):
+			continue
+		try:
+			page = requests.get(f"https://openrouter.ai/{slug}", headers={"User-Agent": "Mozilla/5.0"}, timeout=30).text
+			src = re.search(r'Favicon for %s"[^>]*src="([^"]+)"' % re.escape(slug), page).group(1).replace("&amp;", "&")
+			if src.startswith("/"):
+				src = "https://openrouter.ai" + src
+			ext = src.split("?")[0].rsplit(".", 1)[-1].lower()
+			if ext not in ("svg", "png", "webp", "jpg", "jpeg", "ico"):
+				ext = "png"
+			img = requests.get(src, headers={"User-Agent": "Mozilla/5.0"}, timeout=30).content
+			if ext == "svg":
+				# These providers' marks render invisibly transparent/black on our
+				# dark theme (no fill, or a near-black fill); force a visible chip.
+				bg = ["-b", "silver"] if slug in ("openai", "apodex", "ibm-granite") else []
+				img = subprocess.run(["rsvg-convert", "-w", "64", "-h", "64"] + bg, input=img, capture_output=True, check=True).stdout
+				ext = "png"
+			with open(os.path.join(ICON_DIR, f"{slug}.{ext}"), "wb") as f:
+				f.write(img)
+		except Exception:
+			pass
 	result = []
 	for m in chatpad.free_models:
 		fields = dict(vars(m))
@@ -339,7 +390,7 @@ def api_resume_session(session_id):
 @app.route('/api/sessions/<session_id>/archive', methods=['POST'])
 def api_archive_session(session_id):
 	Session(session_id).archive()
-	return redirect(f'/chat/{session_id}')
+	return redirect('/sessions')
 
 @app.route('/api/sessions/<session_id>/unarchive', methods=['POST'])
 def api_unarchive_session(session_id):
@@ -442,7 +493,7 @@ def api_stream_session(session_id, uuid=None):
 @app.route('/api/sessions')
 def api_sessions():
 	return jsonify([{"uuid": uuid, "archived": archived}
-			for archived in (False, True) for uuid, _, _ in chatpad.list(archived)])
+			for archived in (False, True) for uuid, _, _, _ in chatpad.list(archived)])
 
 @app.route('/api/sessions/<session_id>')
 def api_session(session_id):
