@@ -1,17 +1,44 @@
 {% extends "base.html" %}
 
-{% block title %}Main{% endblock %}
+{% block title %}{% if session_id %}Session {{ session_id }}{% else %}Sessions{% endif %}{% endblock %}
+
+{% block topbar %}
+{% if session_id %}
+    <div class="session-bar">
+        <span>
+            {{ session_id }}
+            <form action="/api/sessions/{{ session_id }}/{{ 'unarchive' if archived else 'archive' }}" method="post">
+                <button type="submit">{{ 'Unarchive' if archived else 'Archive' }}</button>
+            </form>
+        </span>
+    </div>
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<div id="sessions-table">
-{% for day, group in sessions %}
-	<h3>{{ day|format_day }}</h3>
-	{% for s_id, timestamp, title in group %}
-	<div class="session-row">
-		<span class="session-time">{{ timestamp|format_hm }}</span>
-		<a href="/chat/{{ s_id }}">{{ title }}</a>
-	</div>
-	{% endfor %}
-{% endfor %}
-</div>
+
+{% if session_id %}
+    <div class="session"></div>
+{% endif %}
+
+    <template id="permission-template">
+        {% include "permissionbox.html" %}
+    </template>
+
+    {% include "chatbox.html" %}
+
+{% if not session_id %}
+
+
+    <form action="/rotate-keys" method="post">
+        <button type="submit">Rotate keys</button>
+        {% if request.args.get('rotated') %}<small>Keys rotated.</small>{% endif %}
+    </form>
+
+{% endif %}
+
+<script>
+const MODEL_ICONS = {{ icons|tojson }};
+</script>
+
 {% endblock %}

@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Archive{% endblock %}
+{% block title %}{{ 'Archive' if archived else 'Sessions' }}{% endblock %}
 
 {% block content %}
+<div class="session-row">
+	{% if archived %}
+		<a href="/sessions">View active sessions</a>
+	{% else %}
+		<a href="/archive">View archive</a>
+	{% endif %}
+</div>
 <div id="sessions-table">
 {% for day, group in sessions %}
 	<h3>{{ day|format_day }}</h3>

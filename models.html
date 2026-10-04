@@ -16,9 +16,9 @@
 				<th>Reasoning</th>
 				<th>JSON</th>
 				<th>Web search</th>
-				<th>Pricing</th>
-				<th>Overrides</th>
-				<th>Overridden Pricing</th>
+				{# <th>Pricing</th> #}
+				{# <th>Overrides</th> #}
+				{# <th>Overridden Pricing</th> #}
 			</tr>
 		</thead>
 		<tbody>
@@ -26,8 +26,8 @@
 			<tr>
 				<td>
 					{% set icon = model_icon_url(icons, model.id) %}
-					<h4>{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %} {{ model.name }}</h4>
-					<span class="model-description">{{ model.description }}</span>
+					<h4>{{ model.name }}</h4>
+					<span class="model-description">{% if icon %}<img class="model-icon" src="{{ icon }}" alt="">{% endif %}{{ model.description }}</span>
 				</td>
 				<td>{{ model.context_length|format_number }}</td>
 
@@ -42,14 +42,14 @@
 				<td class="cap">{{ '✓' if 'structured_outputs' in params }}</td>
 				<td class="cap">{{ '✓' if 'web_search_options' in params }}</td>
 
-				<!-- Base pricing -->
+				{# <!-- Base pricing -->
 				<td>
 					{% for key, value in model.pricing.items() %}
 						{{ key }}: {% if value is not none %}{{ value }}{% endif %}<br>
 					{% endfor %}
-				</td>
+				</td> #}
 
-				<!-- Override conditions -->
+				{# <!-- Override conditions -->
 				<td>
 					{% for cond in model.overrides %}
 						{% for key, value in cond.items() %}
@@ -57,9 +57,9 @@
 						{% endfor %}
 						{% if not loop.last %}<hr>{% endif %}
 					{% endfor %}
-				</td>
+				</td> #}
 
-				<!-- Overridden prices -->
+				{# <!-- Overridden prices -->
 				<td>
 					{% for prices in model.overridden_pricing %}
 						{% for key, value in prices.items() %}
@@ -67,7 +67,7 @@
 						{% endfor %}
 						{% if not loop.last %}<hr>{% endif %}
 					{% endfor %}
-				</td>
+				</td> #}
 			</tr>
 		{% endfor %}
 		</tbody>

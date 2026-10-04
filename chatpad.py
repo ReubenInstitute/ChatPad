@@ -126,11 +126,15 @@ def model_icon_url(icons, model_id):
 	slug = model_icon_slug(model_id)
 	return icons.get(slug) if slug else None
 
+def asset_version(filename):
+	return int(os.path.getmtime(os.path.join(os.path.dirname(__file__), filename)))
+
 app.jinja_env.globals['tool_summary'] = tool_summary
 app.jinja_env.globals['find_tool_result'] = find_tool_result
 app.jinja_env.globals['NO_CONTENT_TOOLS'] = NO_CONTENT_TOOLS
 app.jinja_env.globals['model_name'] = model_name
 app.jinja_env.globals['model_icon_url'] = model_icon_url
+app.jinja_env.globals['asset_version'] = asset_version
 
 @app.context_processor
 def inject_globals():
@@ -206,21 +210,22 @@ def model_context_lengths():
 def models_view():
 	return render_template('models.html', models=chatpad.models, icons=model_icons())
 
-@app.route('/')
-def main():
+@app.route('/sessions')
+def sessions_view():
 	sessions = chatpad.group_by_day(archived=False)
-	return render_template('main.html', sessions=sessions, icons=model_icons())
+	return render_template('sessions.html', sessions=sessions, archived=False, icons=model_icons())
 
 @app.route('/archive')
 def archive():
 	sessions = chatpad.group_by_day(archived=True)
-	return render_template('archive.html', sessions=sessions)
+	return render_template('sessions.html', sessions=sessions, archived=True, icons=model_icons())
 
 @app.route('/session/<session_id>')
 @app.route('/archive/<session_id>')
 def view_session_redirect(session_id):
 	return redirect(f'/chat/{session_id}')
 
+@app.route('/')
 @app.route('/chat')
 @app.route('/chat/<session_id>')
 def chat_view(session_id=None):
@@ -236,7 +241,7 @@ def chat_view(session_id=None):
 		default_model = model_list[0].id
 	else:
 		default_model = None
-	return render_template('chat.html',
+	return render_template('main.html',
 						   session_id=session_id,
 						   sessions=sessions,
 						   archived=session.archived if session else False,
@@ -334,12 +339,12 @@ def api_resume_session(session_id):
 @app.route('/api/sessions/<session_id>/archive', methods=['POST'])
 def api_archive_session(session_id):
 	Session(session_id).archive()
-	return jsonify({"uuid": session_id, "archived": True})
+	return redirect(f'/chat/{session_id}')
 
 @app.route('/api/sessions/<session_id>/unarchive', methods=['POST'])
 def api_unarchive_session(session_id):
 	Session(session_id).unarchive()
-	return jsonify({"uuid": session_id, "archived": False})
+	return redirect(f'/chat/{session_id}')
 
 @app.route('/api/sessions/<session_id>/messages/<uuid>/hide', methods=['POST'])
 def api_hide_message(session_id, uuid):

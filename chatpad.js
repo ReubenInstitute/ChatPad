@@ -100,19 +100,19 @@ class SessionView {
 		this.message_views = []
 	}
 
-	draw() {
-		this.session.messages.forEach(message => {
+	async draw() {
+		await Promise.all(this.session.messages.map(message => {
 			const container = document.createElement('div')
 			container.className = 'message'
 			this.container.appendChild(container)
 			const view = new MessageView(container, this, message)
 			this.message_views.push(view)
-			view.draw()
-		})
+			return view.draw()
+		}))
 		this.collapseAllButLast()
 	}
 
-	update() {
+	async update() {
 		if (this.session.messages.length > this.message_views.length) {
 			const message = this.session.messages[this.session.messages.length - 1]
 			const container = document.createElement('div')
@@ -120,7 +120,7 @@ class SessionView {
 			this.container.appendChild(container)
 			const view = new MessageView(container, this, message)
 			this.message_views.push(view)
-			view.draw()
+			await view.draw()
 		} else if (this.message_views.length > 0) {
 			this.message_views[this.message_views.length - 1].update()
 		}
@@ -132,12 +132,19 @@ class SessionView {
 	// history never means scrolling through full text. Tool blocks are not
 	// touched here - they always start and stay collapsed by default,
 	// regardless of which message they're in, and only expand on click.
+	// Reasoning is different: it's only useful while the answer is still
+	// being produced, so once the session goes idle it collapses too, even
+	// in the last message - only the prompt, error, and response stay open.
 	collapseAllButLast() {
 		const messages = Array.from(this.container.querySelectorAll('.message'))
 		const lastMessage = messages[messages.length - 1]
+		const running = this.session.status === 'busy'
 		messages.forEach(message => {
 			const blocks = message.querySelectorAll('.prompt, .reasoning, .error, .response')
-			blocks.forEach(el => el.classList.toggle('collapsed', message !== lastMessage))
+			blocks.forEach(el => {
+				const keepOpen = message === lastMessage && (running || !el.classList.contains('reasoning'))
+				el.classList.toggle('collapsed', !keepOpen)
+			})
 		})
 	}
 }
@@ -160,8 +167,8 @@ class MessageView {
 		else this.container.appendChild(el)
 	}
 
-	draw() {
-		this.message.turns.forEach(turn => this.drawTurn(turn))
+	async draw() {
+		await Promise.all(this.message.turns.map(turn => this.drawTurn(turn)))
 		this.update()
 	}
 
@@ -172,7 +179,7 @@ class MessageView {
 			? new ToolTurnView(container, this, turn)
 			: new TurnView(container, this, turn)
 		this.turn_views.push(view)
-		view.draw()
+		return view.draw()
 	}
 
 	update() {
@@ -276,7 +283,9 @@ class TurnView {
 		this.turn = turn
 	}
 
-	draw() {
+	async draw() {
+		if (this.turn.reasoning) this.turn.reasoning = await renderMarkdown(this.turn.reasoning)
+		if (this.turn.response) this.turn.response = await renderMarkdown(this.turn.response)
 		this.update()
 	}
 
@@ -385,8 +394,8 @@ class ToolTurnView {
 			case 'current_time': return 'current time'
 			case 'calculator': return `calculate ${args.expression}`
 			case 'todo': return 'todo'
-			case 'run_python': return 'run python'
-			case 'run_command': return `run ${args.command}`
+			case 'run_python': return `run python ${truncate(args.code, LABEL_TRUNCATE_LENGTH)}`
+			case 'run_command': return `run ${truncate(args.command, LABEL_TRUNCATE_LENGTH)}`
 			case 'make_folder': return `make folder ${args.path}`
 			case 'remove_folder': return `remove folder ${args.path}`
 			case 'light_status': return 'light status'
@@ -466,6 +475,12 @@ function toggleCollapsed(container) {
 // fetch_url was split into get_url and download_url
 const LEGACY_TOOLS = { 'fetch_url': ['get_url', 'download_url'] }
 
+const LABEL_TRUNCATE_LENGTH = 30
+
+function truncate(text, length) {
+	return text.length > length ? text.slice(0, length) + '…' : text
+}
+
 // Session is a single global (see `let session` below); Chatbox never stores
 class Chatbox {
 	constructor(container) {
@@ -505,15 +520,16 @@ class Chatbox {
 		iconify(slot)
 	}
 
+	// Sync the UI from the session's saved settings without writing them back -
+	// a page view must never have the side effect of touching session state.
 	init() {
 		if (!session) return
 		this.status = session.status || 'idle'
-		this.tools = session.settings.tools || []
-		this.think = session.settings.think == null ? true : session.settings.think
-		this.mode = session.settings.mode || 'auto'
-		if (session.settings.model) this.model = session.settings.model
-		if (session.settings.system_model) this.system_model = session.settings.system_model
-		this.archived = session.archived
+		this.applyTools(session.settings.tools || [])
+		this.applyThink(session.settings.think == null ? true : session.settings.think)
+		this.applyMode(session.settings.mode || 'auto')
+		if (session.settings.model) this.applyModel(session.settings.model)
+		if (session.settings.system_model) this.applySystemModel(session.settings.system_model)
 	}
 
 	toggleModelList() {
@@ -565,6 +581,14 @@ class Chatbox {
 	}
 
 	set tools(names) {
+		this.applyTools(names)
+		if (session) {
+			session.settings.tools = this.tools
+			session.settings.save()
+		}
+	}
+
+	applyTools(names) {
 		const current = Array.from(this.container.querySelectorAll('.tool-toggle')).map(el => el.dataset.name)
 		const wanted = new Set()
 		names.forEach(name => {
@@ -577,10 +601,6 @@ class Chatbox {
 			el.classList.toggle('enabled', on)
 			input.disabled = !on
 		})
-		if (session) {
-			session.settings.tools = Array.from(wanted)
-			session.settings.save()
-		}
 	}
 
 	toggleReasoning(el) {
@@ -593,14 +613,18 @@ class Chatbox {
 	}
 
 	set think(value) {
+		this.applyThink(value)
+		if (session) {
+			session.settings.think = value
+			session.settings.save()
+		}
+	}
+
+	applyThink(value) {
 		const el = this.container.querySelector('#reasoning-toggle')
 		if (el) {
 			el.classList.toggle('enabled', value)
 			el.nextElementSibling.disabled = !value
-		}
-		if (session) {
-			session.settings.think = value
-			session.settings.save()
 		}
 	}
 
@@ -614,6 +638,14 @@ class Chatbox {
 	}
 
 	set model(value) {
+		this.applyModel(value)
+		if (session) {
+			session.settings.model = value
+			session.settings.save()
+		}
+	}
+
+	applyModel(value) {
 		this.container.querySelectorAll('#model-menu .model-toggle.enabled').forEach(o => o.classList.remove('enabled'))
 		const option = this.container.querySelector(`#model-menu .model-toggle[data-id="${CSS.escape(value)}"]`)
 		if (option) {
@@ -622,10 +654,6 @@ class Chatbox {
 		}
 		this.container.querySelector('[name="model"]').value = value
 		this.container.querySelector('#model-menu').classList.add('hidden')
-		if (session) {
-			session.settings.model = value
-			session.settings.save()
-		}
 	}
 
 	selectSystemModel(el) {
@@ -638,6 +666,14 @@ class Chatbox {
 	}
 
 	set system_model(value) {
+		this.applySystemModel(value)
+		if (session) {
+			session.settings.system_model = value
+			session.settings.save()
+		}
+	}
+
+	applySystemModel(value) {
 		this.container.querySelectorAll('#system-model-menu .model-toggle.enabled').forEach(o => o.classList.remove('enabled'))
 		const link = this.container.querySelector('#system-model-link')
 		const option = value && this.container.querySelector(`#system-model-menu .model-toggle[data-id="${CSS.escape(value)}"]`)
@@ -647,10 +683,6 @@ class Chatbox {
 			link.classList.remove('hidden')
 		}
 		this.container.querySelector('#system-model-menu').classList.add('hidden')
-		if (session) {
-			session.settings.system_model = value
-			session.settings.save()
-		}
 	}
 
 	toggleMode(el) {
@@ -663,34 +695,20 @@ class Chatbox {
 	}
 
 	set mode(value) {
-		const el = this.container.querySelector('#mode-toggle')
-		if (el) {
-			el.dataset.mode = value
-			el.title = value === 'manual' ? 'Manual: approve each tool call' : 'Auto: tools run without approval'
-		}
-		this.container.querySelector('[name="mode"]').value = value
+		this.applyMode(value)
 		if (session) {
 			session.settings.mode = value
 			session.settings.save()
 		}
 	}
 
-	toggleArchive() {
-		if (!session) return
-		this.archived = !this.archived
-	}
-
-	get archived() {
-		return session ? session.archived : false
-	}
-
-	set archived(value) {
-		session.archived = value
-		const el = this.container.querySelector('#archive-toggle')
-		if (el) el.innerHTML = value ? '<i data-lucide="archive-restore"></i>' : '<i data-lucide="trash-2"></i>'
-		this.container.classList.toggle('archived', value)
-		iconify(this.container)
-		fetch(`/api/sessions/${session.uuid}/${value ? 'archive' : 'unarchive'}`, { method: 'POST' })
+	applyMode(value) {
+		const el = this.container.querySelector('#mode-toggle')
+		if (el) {
+			el.dataset.mode = value
+			el.title = value === 'manual' ? 'Manual: approve each tool call' : 'Auto: tools run without approval'
+		}
+		this.container.querySelector('[name="mode"]').value = value
 	}
 
 	refreshModels() {
@@ -778,9 +796,7 @@ async function handleStreamRecord(record) {
 		session.status = record.status
 		chatbox.status = record.status
 		if (permissionBox && record.status !== 'awaiting') { permissionBox.remove(); permissionBox = null }
-		return
-	}
-	if (record.type === 'prompt') {
+	} else if (record.type === 'prompt') {
 		startLiveTurn(record)
 		currentMessage().turns.push(new MessageTurn({ prompt: record.content }, currentMessage()))
 	} else if (!session || !session.messages.length) {
@@ -893,8 +909,9 @@ async function init() {
 	const json = await (await fetch(`/api/sessions/${sessionId}`)).json()
 	session = new Session(json)
 	liveSessionView = new SessionView(ensureMessagesContainer(), session)
-	liveSessionView.draw()
+	await liveSessionView.draw()
 	chatbox.init()
+	if (session.archived) return
 	if (session.status === 'awaiting') showPermissionBox()
 	const lastMessage = session.messages[session.messages.length - 1]
 	const lastTurn = lastMessage && lastMessage.turns[lastMessage.turns.length - 1]
